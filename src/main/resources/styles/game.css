@@ -1,0 +1,269 @@
+/* Civil Zones JavaFX Styles */
+
+/* Root styling */
+.root {
+    -fx-font-family: 'Segoe UI', system-ui, sans-serif;
+    -fx-font-size: 12px;
+}
+
+/* Dashboard styling */
+.dashboard {
+    -fx-background-color: rgba(0, 0, 0, 0.85);
+    -fx-padding: 10;
+}
+
+.dashboard .section-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFD700;
+}
+
+.dashboard .stat-label {
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+}
+
+.dashboard .resource-box {
+    -fx-background-color: rgba(255, 255, 255, 0.1);
+    -fx-padding: 8;
+    -fx-background-radius: 5;
+}
+
+/* Toolbar styling */
+.toolbar {
+    -fx-background-color: linear-gradient(to bottom, #3a3a3a, #2a2a2a);
+    -fx-padding: 8 15;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 0 1 0;
+}
+
+.toolbar .title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFD700;
+}
+
+.toolbar .button {
+    -fx-background-color: #444444;
+    -fx-text-fill: white;
+    -fx-padding: 5 10;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
+}
+
+.toolbar .button:hover {
+    -fx-background-color: #555555;
+}
+
+/* Build buttons */
+.build-button {
+    -fx-background-color: #555555;
+    -fx-text-fill: white;
+    -fx-padding: 5 10;
+    -fx-font-size: 11px;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
+}
+
+.build-button:hover {
+    -fx-background-color: #666666;
+}
+
+.build-button.selected {
+    -fx-background-color: #4CAF50;
+    -fx-border-color: #FFD700;
+    -fx-border-width: 2;
+}
+
+/* Action buttons */
+.action-button {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 10 15;
+    -fx-font-size: 14px;
+    -fx-background-radius: 5;
+    -fx-cursor: hand;
+}
+
+.action-button:hover {
+    -fx-background-color: #1976D2;
+}
+
+.action-button.settle {
+    -fx-background-color: #4CAF50;
+}
+
+.action-button.settle:hover {
+    -fx-background-color: #388E3C;
+}
+
+.action-button.danger {
+    -fx-background-color: #f44336;
+}
+
+.action-button.danger:hover {
+    -fx-background-color: #d32f2f;
+}
+
+/* Progress bars */
+.progress-bar {
+    -fx-accent: #2196F3;
+    -fx-control-inner-background: #333333;
+}
+
+.progress-bar.thirst {
+    -fx-accent: #03A9F4;
+}
+
+.progress-bar.food {
+    -fx-accent: #FF9800;
+}
+
+.progress-bar.danger {
+    -fx-accent: #f44336;
+}
+
+/* AI Panel */
+.ai-panel {
+    -fx-background-color: rgba(0, 0, 0, 0.85);
+    -fx-padding: 10;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 0 0 1;
+}
+
+.ai-panel .check-box {
+    -fx-text-fill: white;
+}
+
+.ai-panel .check-box .box {
+    -fx-background-color: #444444;
+    -fx-border-color: #666666;
+}
+
+.ai-panel .check-box:selected .box {
+    -fx-background-color: #4CAF50;
+}
+
+/* Toast notifications */
+.toast {
+    -fx-background-color: rgba(0, 0, 0, 0.8);
+    -fx-background-radius: 20;
+    -fx-padding: 10 20;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+}
+
+.toast.success {
+    -fx-background-color: #4CAF50;
+}
+
+.toast.warning {
+    -fx-background-color: #FF9800;
+}
+
+.toast.error {
+    -fx-background-color: #f44336;
+}
+
+.toast.info {
+    -fx-background-color: #2196F3;
+}
+
+/* Game over overlay */
+.overlay {
+    -fx-background-color: rgba(0, 0, 0, 0.8);
+}
+
+.overlay .content {
+    -fx-background-color: rgba(0, 0, 0, 0.9);
+    -fx-background-radius: 20;
+    -fx-padding: 40;
+}
+
+.overlay .game-over-title {
+    -fx-font-size: 32px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f44336;
+}
+
+.overlay .restart-button {
+    -fx-background-color: #4CAF50;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 15 30;
+    -fx-font-size: 16px;
+    -fx-background-radius: 10;
+    -fx-cursor: hand;
+}
+
+.overlay .restart-button:hover {
+    -fx-background-color: #388E3C;
+}
+
+/* Tooltips */
+.tooltip {
+    -fx-background-color: rgba(50, 50, 50, 0.95);
+    -fx-text-fill: white;
+    -fx-padding: 8 12;
+    -fx-background-radius: 5;
+    -fx-font-size: 11px;
+}
+
+/* Scroll bars */
+.scroll-bar {
+    -fx-background-color: #2a2a2a;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #555555;
+    -fx-background-radius: 5;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #666666;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+}
+
+/* Context menus */
+.context-menu {
+    -fx-background-color: rgba(40, 40, 40, 0.95);
+    -fx-border-color: #555555;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+}
+
+.context-menu .menu-item {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+}
+
+.context-menu .menu-item:hover {
+    -fx-background-color: #555555;
+}
+
+/* Labels */
+.label.header {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFD700;
+}
+
+.label.subheader {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #B0BEC5;
+}
+
+/* Separators */
+.separator {
+    -fx-background-color: #555555;
+}
+
+.separator .line {
+    -fx-border-color: #555555;
+}

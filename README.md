@@ -1,129 +1,142 @@
-# 🏛️ CIVIL ZONES: STONE AGE (NEW VERSION)
+# Civil Zones v48.0
 
-## 🆕 This is the NEW Rebuilt Version
+A city-building survival game with Q-Learning AI, converted from JavaScript to Java/JavaFX.
 
-**Version:** 1.0 Stone Age Edition  
-**Status:** Clean rebuild from scratch  
-**Architecture:** Modern modular ES6  
-**Date:** December 31, 2025
+## 🎮 Game Overview
 
----
+Civil Zones is a historical city-building simulation where you lead a small band of nomads from wandering the wilderness to establishing a thriving settlement.
 
-## 📁 Folder Structure
+### Game Phases
 
-```
-CivilZones/
-├── index.html          ← NEW: Main game file
-├── css/
-│   └── styles.css      ← NEW: Professional dark theme
-├── js/
-│   ├── config.js       ← All game constants
-│   ├── utils.js        ← Utilities & noise generator
-│   ├── map.js          ← Map system with expansion
-│   ├── game.js         ← Core game logic
-│   ├── renderer.js     ← Canvas rendering
-│   ├── ui.js           ← DOM manipulation
-│   └── main.js         ← Entry point & game loop
-└── README.md           ← This file
-```
+1. **Wander Phase** - Explore the procedurally generated world, gather resources, recruit nomads, and find the perfect spot to settle
+2. **City Phase** - Build and manage your settlement with residential, commercial, and industrial zones
 
----
+## 🚀 Getting Started
 
-## 🎮 Features
+### Prerequisites
 
-### ✅ Level 0: WANDER Mode
-- Move with WASD/Arrows
-- Collect berries, nomads, stone deposits
-- Hunt animals (deer, bison, mammoth)
-- Chop trees for wood
-- Thirst system (refill at water/wells)
-- Place Water Pits
-- Dynamic map expansion
+- Java 17 or higher
+- Maven 3.8+
 
-### ✅ Level 1: CITY Mode
-- Settle when ready (2+ pop, 100 food, 25 wood)
-- Build 3 types of zones:
-  - 🏡 **Residential** (Tree Houses)
-  - 🏪 **Commercial** (Trading Posts)
-  - 🦬 **Industrial** (Hunting Grounds)
-- 3 states per building (LOW/MEDIUM/LUXURY)
-- Desirability system (RES→COM→IND chain)
-- Population growth with birth/death rates
-- Turn-based year advancement
+### Building
 
----
-
-## 🚀 How to Run
-
-### Option 1: Python Server (Recommended)
 ```bash
-cd "c:\Users\Elite\Documents\My Made Games\Civil Zones Beta 0\CivilZones"
-python -m http.server 8080
+cd Civil-Zones
+mvn clean package
 ```
-Then open: http://localhost:8080
 
-### Option 2: Live Server Extension
-Right-click `index.html` → "Open with Live Server"
+### Running
 
----
+```bash
+mvn javafx:run
+```
 
-## 🎯 What Changed from Legacy
+Or run the packaged JAR:
 
-| Aspect | Legacy (v48) | New (v1.0) |
-|--------|-------------|------------|
-| **File Size** | 14,258 lines in 1 file | ~2,000 lines across 7 modules |
-| **Architecture** | Monolithic | Modular ES6 |
-| **Scope** | 100+ levels (planned) | First 3 levels only |
-| **Performance** | Slow with large maps | Optimized rendering |
-| **Maintainability** | Hard to debug | Easy to find/fix bugs |
-| **Expansion Packs** | Not planned | Built-in support |
+```bash
+java -jar target/civil-zones-48.0.jar
+```
 
----
+## 🎯 Features
 
-## 📝 Controls
+### Exploration (Wander Phase)
+- **WASD/Arrow Keys** - Move your nomad band
+- **Click** - Pathfind to a location
+- **Space** - Settle when requirements are met
+- Gather berries, hunt animals, chop trees, mine stone
+- Recruit friendly nomads (beware hostile ones!)
+- Manage thirst by staying near water
 
-| Key | Action |
-|-----|--------|
-| **WASD / Arrows** | Move (WANDER mode) |
-| **C** | Chop tree |
-| **Space** | Advance turn (CITY mode) |
-| **Mouse Wheel** | Zoom in/out |
-| **Right-click Drag** | Pan camera |
-| **Click** | Select tile / Place building |
-| **F5** | Quick save |
-| **F9** | Quick load |
-| **H** | Help |
-| **Esc** | Cancel selection |
+### Settlement Requirements
+- Minimum 10 population
+- 50+ food
+- 30+ wood
 
----
+### City Building (City Phase)
+- **🏠 Residence** - Houses for your population
+- **🔥 Campfire** - Community gathering, boosts desirability
+- **🏹 Hunting Ground** - Food production
+- **💧 Well** - Water source, reduces thirst-related issues
+- **🛤️ Road** - Improves access and desirability
 
-## 🗂️ Related Folders
+### Desirability System
+Buildings evolve based on surrounding desirability:
+- Proximity to water, campfires, and wells increases desirability
+- Industrial buildings decrease nearby desirability
+- High desirability → better building variants → more population capacity
 
-- **`Legacy-CitGame-v48-Original/`** - Original 14K line game
-- **`Legacy-CitGame-v48-Backup/`** - Copy of legacy files
-- **`Archive-StoneAge-Draft/`** - Early draft files
+### Q-Learning AI
+- Toggle training mode to let the AI learn optimal strategies
+- Watch the AI play automatically
+- AI learns to explore, gather resources, and build efficiently
 
----
+## 📁 Project Structure
 
-## 🔧 Technical Notes
+```
+Civil-Zones/
+├── pom.xml                           # Maven build configuration
+├── src/main/java/com/civilzones/
+│   ├── CivilZonesApp.java           # Main application entry point
+│   ├── ai/
+│   │   └── QLearningAI.java         # Q-Learning AI implementation
+│   ├── config/
+│   │   ├── Config.java              # Game constants and configuration
+│   │   └── Colors.java              # Color definitions
+│   ├── entity/
+│   │   ├── Entity.java              # Base entity class
+│   │   ├── Player.java              # Player entity
+│   │   ├── Berry.java               # Collectible berry
+│   │   ├── Nomad.java               # Recruitable/hostile nomad
+│   │   ├── Animal.java              # Huntable animal
+│   │   ├── AnimalType.java          # Animal type enum
+│   │   └── StoneDeposit.java        # Mineable stone
+│   ├── game/
+│   │   ├── Game.java                # Core game logic
+│   │   ├── GameState.java           # Game state enum
+│   │   ├── TerrainType.java         # Terrain types enum
+│   │   ├── BuildingType.java        # Building types enum
+│   │   ├── Tile.java                # Map tile class
+│   │   ├── Building.java            # Building class
+│   │   ├── Inventory.java           # Resource storage
+│   │   └── Noise.java               # Perlin noise generator
+│   ├── renderer/
+│   │   └── GameRenderer.java        # JavaFX Canvas rendering
+│   └── ui/
+│       └── GameUI.java              # UI components
+└── src/main/resources/
+    └── styles/
+        └── game.css                 # JavaFX styling
+```
 
-- **Map Generation:** Simplex noise with octaves
-- **Water Limit:** Max 19% of map
-- **Expansion:** Grows from 64x64 to 512x512
-- **Fog of War:** Reveals as you explore
-- **Save System:** LocalStorage (browser-based)
+## 🎨 Visual Style
 
----
+The game features a colorful, stylized look inspired by classic games:
+- **Terrain** - Gradient-based tiles with highlights and details
+- **Water** - Animated sparkles and waves
+- **Characters** - Cave painting style nomads, Fred Flintstone-inspired player
+- **Buildings** - Visual evolution based on prosperity level
 
-## 🎨 Design Philosophy
+## 🔧 Technical Details
 
-This rebuild focuses on:
-1. **Code Quality** - Clean, maintainable modules
-2. **Performance** - Optimized rendering for large maps
-3. **Clarity** - One place for all constants (config.js)
-4. **Expansion** - Built for future expansion packs
-5. **Polish** - Professional UI matching v48 style
+### Map Generation
+- **Perlin Noise FBM** - Fractional Brownian Motion for natural terrain
+- **River Generation** - Flows from highlands to lowlands
+- **Entity Spawning** - Balanced resource distribution
 
----
+### Pathfinding
+- **A* Algorithm** - Efficient path finding across the map
+- **Walkability** - Respects terrain and building placement
 
-**🎮 Ready to explore the Stone Age!**
+### Building Evolution
+- Desirability calculated from surrounding features
+- Buildings automatically upgrade/downgrade based on conditions
+- Population adjusts with building capacity
+
+## 📜 License
+
+This project is a conversion of an original JavaScript game to Java/JavaFX.
+
+## 🤝 Contributing
+
+Feel free to submit issues and enhancement requests!
+Android Development Project 
