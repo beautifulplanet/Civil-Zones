@@ -8397,6 +8397,21 @@
                     Controller.showGameOver('FLOOD');
                     return;
                 }
+                
+                // Mark that a major flood event happened this year (for game over screen)
+                if(populationDrowned > 0) {
+                    this.lastMajorFloodYear = this.year;
+                    this.lastFloodDeaths = populationDrowned;
+                }
+            },
+            
+            // Helper to determine game over reason - checks if flood was the real cause
+            getGameOverReason(defaultReason) {
+                // If a major flood happened this year and killed significant population, blame the flood
+                if(this.lastMajorFloodYear === this.year && this.lastFloodDeaths > 0) {
+                    return 'FLOOD';
+                }
+                return defaultReason;
             },
             
             // Check if a tile is at flood risk
@@ -11960,7 +11975,7 @@
                     }
                     // Check for game over
                     if(this.pop <= 0) {
-                        Controller.showGameOver('LEVEL1');
+                        Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                         return;
                     }
                 }
@@ -12028,9 +12043,9 @@
                             assignPopulationToResidential(this);
                         }
                         
-                        // Check for game over
+                        // Check for game over - attribute to flood if that was the cause
                         if(this.pop <= 0) {
-                            Controller.showGameOver('LEVEL1');
+                            Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                             return;
                         }
                     }
@@ -12072,11 +12087,11 @@
                     
                     // GAME OVER: No food or no population = instant death
                     if(this.food <= 0 && this.pop > 0) {
-                        Controller.showGameOver('LEVEL1');
+                        Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                         return;
                     }
                     if(this.pop <= 0) {
-                        Controller.showGameOver('LEVEL1');
+                        Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                         return;
                     }
                     
@@ -12394,11 +12409,11 @@
                     
                     // GAME OVER: No food or no population = instant death
                     if(this.food <= 0 && this.pop > 0) {
-                        Controller.showGameOver('LEVEL1');
+                        Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                         return;
                     }
                     if(this.pop <= 0) {
-                        Controller.showGameOver('LEVEL1');
+                        Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                         return;
                     }
                     
@@ -12430,7 +12445,7 @@
                 
                 // FINAL GAME OVER CHECK - Catch any edge cases where pop reaches 0
                 if(this.pop <= 0) {
-                    Controller.showGameOver('LEVEL1');
+                    Controller.showGameOver(this.getGameOverReason('LEVEL1'));
                     return;
                 }
                 
