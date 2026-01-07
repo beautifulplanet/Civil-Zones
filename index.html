@@ -587,7 +587,7 @@
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">
             <button onclick="QLearningAI.replayBestRun()" style="padding:6px 10px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="Replay the best recorded run">🔄 Replay Best</button>
-            <button onclick="QLearningAI.showSuccessTemplates()" style="padding:6px 10px;background:#FF9800;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="View successful build patterns">📋 Templates</button>
+            <button onclick="QLearningAI.showWisdom()" style="padding:6px 10px;background:#FF9800;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="View learned rules and patterns">🧠 Wisdom</button>
             <button onclick="QLearningAI.softReset()" style="padding:6px 10px;background:#f44336;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="Reset but keep best patterns">♻️ Soft Reset</button>
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">
@@ -16841,6 +16841,49 @@
                             }
                         }
                     }
+                    
+                    // ═══════════════════════════════════════════════════════════════
+                    // WISDOM-BASED DECISIONS - Use learned rules
+                    // ═══════════════════════════════════════════════════════════════
+                    if(this.wisdom && this.wisdom.survivalRules) {
+                        // Build context for wisdom evaluation
+                        let ctx = {
+                            pop: pop,
+                            wellCount: wellCount,
+                            housingCap: housingCap,
+                            food: food,
+                            wood: wood,
+                            roadCount: roadCount,
+                            resCount: resCount,
+                            comCount: comCount,
+                            indCount: indCount,
+                            wellCost: wellCost,
+                            resCost: resCost,
+                            comCost: comCost,
+                            indCost: indCost,
+                            roadCost: roadCost
+                        };
+                        
+                        // Try wisdom-based action (70% chance to use wisdom)
+                        if(Math.random() < 0.7) {
+                            let wisdomAction = this.getWisdomAction(ctx);
+                            if(wisdomAction) {
+                                this.log(`🧠 Wisdom suggests: ${wisdomAction}`);
+                                return wisdomAction;
+                            }
+                        }
+                        
+                        // Try flow-based action (for early game)
+                        let buildCount = (Game.blds ? Game.blds.length : 0);
+                        if(buildCount < 10) {
+                            let flowAction = this.getFlowAction(buildCount);
+                            if(flowAction && this.canAffordAction(flowAction, ctx)) {
+                                this.log(`🔄 Flow suggests: ${flowAction}`);
+                                return flowAction;
+                            }
+                        }
+                    }
+                    
                     // ═══════════════════════════════════════════════════════════════
                     // TUTORIAL MODE (1 in 5 episodes) - Strict scripted build order
                     // This teaches the AI a good baseline strategy
@@ -18484,6 +18527,12 @@
                 this.loopCounter = 0;
                 this.errorCount = 0;
                 
+                // Initialize wisdom system if not already done
+                if(!this.wisdom || !this.wisdom.survivalRules || this.wisdom.survivalRules.length === 0) {
+                    this.initWisdom();
+                    this.log('🧠 Wisdom system initialized');
+                }
+                
                 // Load any saved playbooks from watching player
                 this.loadPlaybooks();
                 this.playbookStep = 0;
@@ -19037,44 +19086,371 @@ ${visited >= total ? '🏆 MAP 100% EXPLORED!' : `Progress: ${pct}% - Keep explo
             },
             
             // ═══════════════════════════════════════════════════════════════
-            // EXPERIENCE REPLAY BUFFER - Store and learn from best episodes
+            // WISDOM SYSTEM - Summarized knowledge instead of raw data
+            // Complex ideas = simple working tasks put together logically
+            // ═══════════════════════════════════════════════════════════════
+            
+            // Learned rules (wisdom extracted from experience)
+            wisdom: {
+                // Survival rules: condition → required action
+                survivalRules: [],
+                // Build order patterns that work
+                successFlows: [],
+                // Ratios that work well
+                optimalRatios: { wellsPerPop: 0.01, resPerWell: 4, comPerRes: 0.25, indPerRes: 0.15 },
+                // Timing rules
+                timingRules: [],
+                // Statistics for rule confidence
+                ruleStats: {}
+            },
+            
+            // Initialize wisdom with basic rules
+            initWisdom: function() {
+                // Core survival rules (condition → action → priority)
+                this.wisdom.survivalRules = [
+                    { id: 'thirst', condition: 'pop > wells * 100', action: 'BUILD_WELL', priority: 10, confidence: 1.0 },
+                    { id: 'housing', condition: 'pop >= housingCap - 5', action: 'BUILD_RES', priority: 8, confidence: 1.0 },
+                    { id: 'food_low', condition: 'food < pop * 5', action: 'BUILD_COM', priority: 7, confidence: 0.8 },
+                    { id: 'expand', condition: 'pop > 20 && roads < pop/5', action: 'BUILD_ROAD', priority: 5, confidence: 0.7 }
+                ];
+                
+                // Basic success flow (what order to build)
+                this.wisdom.successFlows = [
+                    { name: 'Basic Start', steps: ['SETTLE', 'BUILD_WELL', 'BUILD_RES', 'BUILD_RES', 'BUILD_WELL', 'BUILD_COM'], avgPop: 0, uses: 0, successes: 0 }
+                ];
+                
+                // Timing rules (when to do things)
+                this.wisdom.timingRules = [
+                    { id: 'early_wells', rule: 'Build well before pop > 50', yearRange: [0, 5], triggered: 0, helped: 0 },
+                    { id: 'expand_y10', rule: 'Build roads after year 10', yearRange: [10, 20], triggered: 0, helped: 0 }
+                ];
+            },
+            
+            // Learn from a completed episode - extract patterns
+            learnFromEpisode: function(result) {
+                let dominated = result.pop < 10 && result.year < 5; // Quick death, not useful
+                
+                // Update rule confidence based on what happened
+                if(result.deathCause) {
+                    this.updateRuleFromFailure(result);
+                }
+                
+                if(result.pop >= 20 || result.year >= 10) {
+                    this.updateRuleFromSuccess(result);
+                }
+                
+                // Update optimal ratios from successful runs
+                if(result.pop >= 30 && result.year >= 15) {
+                    this.updateOptimalRatios(result);
+                }
+                
+                // Extract successful build flows
+                if(result.buildOrder && result.buildOrder.length >= 5 && result.pop >= 25) {
+                    this.extractSuccessFlow(result);
+                }
+                
+                // Prune low-confidence rules
+                this.pruneWisdom();
+            },
+            
+            // Update rules based on failure
+            updateRuleFromFailure: function(result) {
+                let cause = result.deathCause || 'unknown';
+                let stats = this.wisdom.ruleStats;
+                
+                // Track failure patterns (summarized, not individual)
+                let patternKey = `${cause}_pop${Math.floor(result.pop/20)*20}_yr${Math.floor(result.year/10)*10}`;
+                stats[patternKey] = stats[patternKey] || { count: 0, lastSeen: 0 };
+                stats[patternKey].count++;
+                stats[patternKey].lastSeen = Date.now();
+                
+                // If same failure happens 3+ times, create/strengthen a rule
+                if(stats[patternKey].count >= 3) {
+                    let existingRule = this.wisdom.survivalRules.find(r => r.id === 'learned_' + patternKey);
+                    if(!existingRule) {
+                        // Create new rule based on failure pattern
+                        let newRule = this.createRuleFromFailure(cause, result);
+                        if(newRule) {
+                            this.wisdom.survivalRules.push(newRule);
+                            console.log(`[WISDOM] New rule learned: ${newRule.id} → ${newRule.action}`);
+                        }
+                    } else {
+                        existingRule.confidence = Math.min(1.0, existingRule.confidence + 0.1);
+                    }
+                }
+            },
+            
+            // Create a rule from repeated failures
+            createRuleFromFailure: function(cause, result) {
+                let pop = result.pop || 0;
+                let wells = result.wells || 0;
+                let res = result.resCount || 0;
+                
+                switch(cause) {
+                    case 'thirst':
+                    case 'water-crisis':
+                    case 'dehydration':
+                        return {
+                            id: 'learned_water_' + Math.floor(pop/20)*20,
+                            condition: `pop > ${Math.max(10, pop - 20)} && wells < ${wells + 1}`,
+                            action: 'BUILD_WELL',
+                            priority: 10,
+                            confidence: 0.6,
+                            learned: true
+                        };
+                    case 'famine':
+                    case 'starvation':
+                        return {
+                            id: 'learned_food_' + Math.floor(pop/20)*20,
+                            condition: `pop > ${Math.max(10, pop - 10)} && food < pop * 3`,
+                            action: 'BUILD_COM',
+                            priority: 8,
+                            confidence: 0.6,
+                            learned: true
+                        };
+                    case 'overcrowding':
+                        return {
+                            id: 'learned_housing_' + Math.floor(pop/20)*20,
+                            condition: `pop >= housingCap - 10`,
+                            action: 'BUILD_RES',
+                            priority: 7,
+                            confidence: 0.6,
+                            learned: true
+                        };
+                    default:
+                        return null;
+                }
+            },
+            
+            // Update rules from successful runs
+            updateRuleFromSuccess: function(result) {
+                // Boost confidence of rules that match successful state
+                let wells = result.wells || 0;
+                let pop = result.pop || 0;
+                
+                // If we had enough wells and survived, that ratio works
+                if(pop > 50 && wells > 0) {
+                    let ratio = pop / wells;
+                    // Update optimal ratio (weighted average)
+                    this.wisdom.optimalRatios.wellsPerPop = 
+                        (this.wisdom.optimalRatios.wellsPerPop * 0.9) + ((1/ratio) * 0.1);
+                }
+            },
+            
+            // Update optimal ratios from very successful runs
+            updateOptimalRatios: function(result) {
+                if(!result.buildings) return;
+                
+                let res = result.buildings.filter(b => b.t === 'RES' || b.t === 'R').length;
+                let com = result.buildings.filter(b => b.t === 'COM' || b.t === 'C').length;
+                let ind = result.buildings.filter(b => b.t === 'IND' || b.t === 'I').length;
+                let wells = result.wells || 0;
+                
+                if(res > 0) {
+                    // Weighted update of ratios
+                    let w = 0.1; // Learning weight
+                    if(com > 0) this.wisdom.optimalRatios.comPerRes = this.wisdom.optimalRatios.comPerRes * (1-w) + (com/res) * w;
+                    if(ind > 0) this.wisdom.optimalRatios.indPerRes = this.wisdom.optimalRatios.indPerRes * (1-w) + (ind/res) * w;
+                    if(wells > 0) this.wisdom.optimalRatios.resPerWell = this.wisdom.optimalRatios.resPerWell * (1-w) + (res/wells) * w;
+                }
+            },
+            
+            // Extract a successful build flow
+            extractSuccessFlow: function(result) {
+                // Simplify build order (remove duplicates in sequence)
+                let simplified = [];
+                let lastAction = null;
+                for(let action of result.buildOrder.slice(0, 15)) {
+                    if(action !== lastAction || action === 'BUILD_RES') {
+                        simplified.push(action);
+                        lastAction = action;
+                    }
+                }
+                
+                // Check if similar flow exists
+                let similar = this.wisdom.successFlows.find(f => {
+                    if(f.steps.length !== simplified.length) return false;
+                    let matches = 0;
+                    for(let i = 0; i < f.steps.length; i++) {
+                        if(f.steps[i] === simplified[i]) matches++;
+                    }
+                    return matches / f.steps.length > 0.7; // 70% similar
+                });
+                
+                if(similar) {
+                    // Update existing flow
+                    similar.uses++;
+                    similar.avgPop = (similar.avgPop * (similar.uses - 1) + result.pop) / similar.uses;
+                    if(result.pop >= 30) similar.successes++;
+                } else if(this.wisdom.successFlows.length < 10) {
+                    // Add new flow
+                    this.wisdom.successFlows.push({
+                        name: `Flow_${Date.now()}`,
+                        steps: simplified,
+                        avgPop: result.pop,
+                        uses: 1,
+                        successes: result.pop >= 30 ? 1 : 0
+                    });
+                }
+                
+                // Sort by success rate and prune to top 5
+                this.wisdom.successFlows.sort((a, b) => {
+                    let rateA = a.uses > 0 ? a.successes / a.uses : 0;
+                    let rateB = b.uses > 0 ? b.successes / b.uses : 0;
+                    return rateB - rateA;
+                });
+                this.wisdom.successFlows = this.wisdom.successFlows.slice(0, 5);
+            },
+            
+            // Prune low-value wisdom to save memory
+            pruneWisdom: function() {
+                // Remove low-confidence learned rules
+                this.wisdom.survivalRules = this.wisdom.survivalRules.filter(r => 
+                    !r.learned || r.confidence >= 0.3
+                );
+                
+                // Remove old failure stats (older than 1 hour)
+                let cutoff = Date.now() - 3600000;
+                for(let key in this.wisdom.ruleStats) {
+                    if(this.wisdom.ruleStats[key].lastSeen < cutoff && this.wisdom.ruleStats[key].count < 5) {
+                        delete this.wisdom.ruleStats[key];
+                    }
+                }
+                
+                // Keep rule stats under 100 entries
+                let statsKeys = Object.keys(this.wisdom.ruleStats);
+                if(statsKeys.length > 100) {
+                    statsKeys.sort((a, b) => this.wisdom.ruleStats[b].count - this.wisdom.ruleStats[a].count);
+                    for(let i = 100; i < statsKeys.length; i++) {
+                        delete this.wisdom.ruleStats[statsKeys[i]];
+                    }
+                }
+            },
+            
+            // Get best action from wisdom (rule-based)
+            getWisdomAction: function(ctx) {
+                if(!ctx) return null;
+                
+                // Evaluate all survival rules
+                let applicableRules = [];
+                for(let rule of this.wisdom.survivalRules) {
+                    if(this.evaluateCondition(rule.condition, ctx)) {
+                        applicableRules.push(rule);
+                    }
+                }
+                
+                if(applicableRules.length === 0) return null;
+                
+                // Sort by priority * confidence
+                applicableRules.sort((a, b) => (b.priority * b.confidence) - (a.priority * a.confidence));
+                
+                // Return highest priority action we can afford
+                for(let rule of applicableRules) {
+                    if(this.canAffordAction(rule.action, ctx)) {
+                        return rule.action;
+                    }
+                }
+                
+                return null;
+            },
+            
+            // Simple condition evaluator
+            evaluateCondition: function(condition, ctx) {
+                try {
+                    // Replace variables with context values
+                    let expr = condition
+                        .replace(/pop/g, ctx.pop || 0)
+                        .replace(/wells/g, ctx.wellCount || 0)
+                        .replace(/housingCap/g, ctx.housingCap || 0)
+                        .replace(/food/g, ctx.food || 0)
+                        .replace(/roads/g, ctx.roadCount || 0)
+                        .replace(/res/g, ctx.resCount || 0)
+                        .replace(/com/g, ctx.comCount || 0)
+                        .replace(/ind/g, ctx.indCount || 0);
+                    
+                    // Safely evaluate (basic math only)
+                    return Function('"use strict"; return (' + expr + ')')();
+                } catch(e) {
+                    return false;
+                }
+            },
+            
+            // Get suggested flow step
+            getFlowAction: function(buildCount) {
+                if(this.wisdom.successFlows.length === 0) return null;
+                
+                // Use best flow (highest success rate)
+                let bestFlow = this.wisdom.successFlows[0];
+                if(buildCount < bestFlow.steps.length) {
+                    return bestFlow.steps[buildCount];
+                }
+                return null;
+            },
+            
+            // Show wisdom summary
+            showWisdom: function() {
+                let w = this.wisdom;
+                let msg = '🧠 AI WISDOM SUMMARY\n\n';
+                
+                msg += '📋 SURVIVAL RULES:\n';
+                w.survivalRules.slice(0, 8).forEach(r => {
+                    msg += `  ${r.learned ? '🆕' : '📌'} ${r.action} (priority:${r.priority}, conf:${(r.confidence*100).toFixed(0)}%)\n`;
+                });
+                
+                msg += '\n📊 OPTIMAL RATIOS:\n';
+                msg += `  Wells: 1 per ${Math.round(1/w.optimalRatios.wellsPerPop)} pop\n`;
+                msg += `  RES per Well: ${w.optimalRatios.resPerWell.toFixed(1)}\n`;
+                msg += `  COM per RES: ${(w.optimalRatios.comPerRes*100).toFixed(0)}%\n`;
+                msg += `  IND per RES: ${(w.optimalRatios.indPerRes*100).toFixed(0)}%\n`;
+                
+                msg += '\n🔄 SUCCESS FLOWS:\n';
+                w.successFlows.slice(0, 3).forEach((f, i) => {
+                    let rate = f.uses > 0 ? ((f.successes/f.uses)*100).toFixed(0) : 0;
+                    msg += `  ${i+1}. ${f.steps.slice(0,5).join('→')}...\n`;
+                    msg += `     AvgPop:${f.avgPop.toFixed(0)} Success:${rate}% (${f.uses} uses)\n`;
+                });
+                
+                msg += `\n💾 Stats tracked: ${Object.keys(w.ruleStats).length} patterns`;
+                
+                alert(msg);
+            },
+            
+            // ═══════════════════════════════════════════════════════════════
+            // EXPERIENCE REPLAY BUFFER - Simplified, wisdom-based
             // ═══════════════════════════════════════════════════════════════
             experienceBuffer: [],
-            maxBufferSize: 50,
+            maxBufferSize: 10, // Reduced from 50 - we learn rules, not store data
             successTemplates: [],  // Proven build sequences
             bestRunEver: null,     // Single best run for replay
             
-            // Record experience at end of episode
+            // Record experience at end of episode - now uses wisdom system
             recordExperience: function() {
                 let exp = {
                     episode: this.episode,
                     reward: this.totalReward,
                     pop: Game.pop || 0,
                     year: Game.year || 0,
-                    buildings: Game.blds ? Game.blds.map(b => ({t: b.t, x: b.x, y: b.y})) : [],
-                    buildOrder: this.episodeBuildOrder || [],
-                    stage: PROGRESSION ? PROGRESSION.stage : 0,
-                    deathCause: this.lastDeathCause,
-                    tacticUsed: this.activeMacroTactic ? this.activeMacroTactic.id : null,
-                    timestamp: Date.now()
+                    wells: Game.wellCount || 0,
+                    resCount: Game.zoneCount || 0,
+                    buildings: Game.blds ? Game.blds.map(b => ({t: b.t})) : [], // Just type, not position
+                    buildOrder: (this.episodeBuildOrder || []).slice(0, 20), // Max 20 actions
+                    deathCause: this.lastDeathCause
                 };
                 
-                // Add to buffer, prioritize by score
+                // LEARN FROM THIS EPISODE - extract wisdom instead of storing raw data
+                this.learnFromEpisode(exp);
+                
+                // Only keep top 10 experiences (not 50)
                 this.experienceBuffer.push(exp);
                 this.experienceBuffer.sort((a, b) => b.reward - a.reward);
                 if(this.experienceBuffer.length > this.maxBufferSize) {
-                    this.experienceBuffer.pop(); // Remove worst
+                    this.experienceBuffer.pop();
                 }
                 
-                // Track best run ever
+                // Track best run ever (single reference)
                 if(!this.bestRunEver || exp.reward > this.bestRunEver.reward) {
                     this.bestRunEver = exp;
-                    this.log(`🏆 NEW BEST RUN! Pop:${exp.pop} Year:${exp.year} Reward:${exp.reward.toFixed(0)}`);
-                }
-                
-                // Auto-create success template if good run
-                if(exp.pop >= 30 && exp.year >= 10 && exp.buildOrder.length >= 5) {
-                    this.createSuccessTemplate(exp);
+                    this.log(`🏆 NEW BEST! Pop:${exp.pop} Year:${exp.year}`);
                 }
             },
             
