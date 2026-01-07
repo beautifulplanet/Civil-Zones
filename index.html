@@ -8322,6 +8322,8 @@
                 let drained = 0;
                 let buildingsLost = [];
                 let populationDrowned = 0;
+                let wellsLost = 0;
+                let bldsToRemove = []; // Track blds array items to remove
                 
                 for(let x = 0; x < CFG.W; x++) {
                     for(let y = 0; y < CFG.H; y++) {
@@ -8334,17 +8336,37 @@
                         if(tile.elevation < seaLevel && tile.type !== 'WATER' && tile.type !== 'DEEP') {
                             // FLOOD THIS TILE
                             
-                            // Check for buildings first - KILL POPULATION IMMEDIATELY
+                            // Check for tile-based buildings first - KILL POPULATION IMMEDIATELY
                             if(tile.building || tile.zone) {
                                 // Count population lost in this building
                                 if(tile.building && tile.building.pop) {
                                     populationDrowned += tile.building.pop;
                                 }
                                 buildingsLost.push({x, y, type: tile.building?.type || tile.zone, pop: tile.building?.pop || 0});
-                                // Destroy building
+                                // Destroy building on tile
                                 tile.building = null;
                                 tile.zone = null;
                                 tile.road = false;
+                            }
+                            
+                            // Check for blds array buildings at this location (wells, COM, IND, RES, etc)
+                            // These need to be tracked for removal
+                            if(this.blds) {
+                                for(let i = 0; i < this.blds.length; i++) {
+                                    let b = this.blds[i];
+                                    // Check if building occupies this tile (1x1 or 2x2 buildings)
+                                    let bSize = (b.t === 'WELL' || b.t === 'COM' || b.t === 'IND') ? 1 : 2;
+                                    if(x >= b.x && x < b.x + bSize && y >= b.y && y < b.y + bSize) {
+                                        if(!bldsToRemove.includes(i)) {
+                                            bldsToRemove.push(i);
+                                            if(b.t === 'WELL') wellsLost++;
+                                            // RES buildings have population
+                                            if(b.t === 'RES' && b.pop) {
+                                                populationDrowned += b.pop;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             
                             // Check if player is on this tile - instant death!
@@ -8361,6 +8383,7 @@
                         else if(tile.elevation >= seaLevel && (tile.type === 'WATER' || tile.type === 'DEEP')) {
                             // DRAIN THIS TILE (was water, now above sea level)
                             // Only drain shallow water tiles (not deep ocean which has elevation 0-1)
+                            // NOTE: Buildings do NOT come back - player must rebuild!
                             if(tile.elevation > 1) {
                                 tile.type = tile.originalType || 'SAND';
                                 drained++;
@@ -8370,12 +8393,30 @@
                     }
                 }
                 
+                // Remove flooded buildings from blds array (in reverse order to maintain indices)
+                if(bldsToRemove.length > 0) {
+                    bldsToRemove.sort((a, b) => b - a); // Sort descending
+                    for(let idx of bldsToRemove) {
+                        let removedBld = this.blds[idx];
+                        buildingsLost.push({x: removedBld.x, y: removedBld.y, type: removedBld.t});
+                        this.blds.splice(idx, 1);
+                    }
+                    // Force recalc of well count and other cached values
+                    this.wellCount = this.blds.filter(b => b.t === 'WELL').length;
+                }
+                
                 // KILL POPULATION FROM FLOODED BUILDINGS
                 if(populationDrowned > 0) {
                     this.pop = Math.max(0, this.pop - populationDrowned);
                     this.geology.populationDrowned = (this.geology.populationDrowned || 0) + populationDrowned;
                     Controller.toast(`🌊💀 ${populationDrowned} people drowned in the rising flood!`, 5000);
                     this.logEvent(`Year ${this.year}: ${populationDrowned} drowned as waters rose`);
+                }
+                
+                // Report wells lost
+                if(wellsLost > 0) {
+                    Controller.toast(`💧🌊 ${wellsLost} well${wellsLost > 1 ? 's' : ''} destroyed by flooding!`, 4000);
+                    this.logEvent(`Year ${this.year}: ${wellsLost} wells lost to flooding`);
                 }
                 
                 // Update stats
