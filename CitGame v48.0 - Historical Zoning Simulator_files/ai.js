@@ -30,7 +30,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const AI = {
-    version: 'AI v2026-01-07 HighGround+2x2+Roads',
+    version: 'AI v2026-01-07b HighGround+2x2+Roads+UIAware',
     enabled: false,
     lastAction: 0,
     updateInterval: 150, // milliseconds between actions
@@ -38,6 +38,41 @@ const AI = {
     pathStuckTimer: null,
     movementHistory: [], // Track last N moves
     movementPenalty: 0, // Track penalty points
+    
+    // ═══════════════════════════════════════════════════════════════
+    // UI AWARENESS - Read game state from UI for better decisions
+    // ═══════════════════════════════════════════════════════════════
+    readUIState(game) {
+        let state = {
+            pop: game.pop || 0,
+            food: game.food || 0,
+            wood: game.wood || 0,
+            stone: game.stone || 0,
+            metal: game.metal || 0,
+            year: game.year || 0,
+            housingCap: game.housingCap || 0,
+            wells: game.blds ? game.blds.filter(b => b.t === 'WELL').length : 0,
+            resZones: game.tiles ? game.tiles.flat().filter(t => t.zone === 'R').length : 0,
+            comZones: game.blds ? game.blds.filter(b => b.t === 'COM').length : 0,
+            indZones: game.blds ? game.blds.filter(b => b.t === 'IND').length : 0,
+            paths: game.tiles ? game.tiles.flat().filter(t => t.path).length : 0,
+        };
+        // Calculate critical needs
+        state.needsWells = state.pop > 0 && (state.wells * 100) < state.pop;
+        state.wellsNeeded = Math.max(0, Math.ceil(state.pop / 100) - state.wells);
+        state.needsHousing = state.pop >= state.housingCap - 5;
+        state.housingNeeded = Math.max(0, state.pop - state.housingCap + 10);
+        state.foodPerPerson = state.pop > 0 ? state.food / state.pop : 0;
+        state.isStarving = state.food < state.pop * 2;
+        state.isThirsty = state.needsWells;
+        return state;
+    },
+    
+    // Update version label in UI
+    updateVersionLabel() {
+        let label = document.getElementById('ai-version-label');
+        if(label) label.textContent = this.version;
+    }
     
     // ═══════════════════════════════════════════════════════════════
     // MAIN UPDATE LOOP
@@ -145,17 +180,25 @@ const AI = {
     // CITY MODE - Strategic Building & Development
     // ═══════════════════════════════════════════════════════════════
     cityMode(game) {
+        // Read UI state for smarter decisions
+        let ui = this.readUIState(game);
+        
         // Debug: Log population, housing each year
         if(game.year && game.year !== this._lastDebugYear) {
             this._lastDebugYear = game.year;
-            let housingCap = game.housingCap || 0;
-            let pop = game.pop || 0;
-            let wells = game.blds ? game.blds.filter(b => b.t === 'WELL').length : 0;
-            console.log(`[AI DEBUG Y${game.year}] Pop=${pop}, Housing=${housingCap}, Wells=${wells}`);
+            console.log(`[AI DEBUG Y${ui.year}] Pop=${ui.pop}, Housing=${ui.housingCap}, Wells=${ui.wells}, NeedWells=${ui.wellsNeeded}, NeedHousing=${ui.housingNeeded}`);
         }
         
         // Analyze current city state
         let stats = this.analyzeCityState(game);
+        
+        // CRITICAL: Build wells FIRST if people are dying of thirst!
+        if(ui.needsWells && ui.wellsNeeded > 0 && game.food >= 20) {
+            console.log(`[AI CRITICAL] Need ${ui.wellsNeeded} more wells! Building immediately.`);
+            if(this.tryBuild(game, 'WELL', 50)) {
+                return; // Focus on wells until we have enough
+            }
+        }
         
         // Make strategic building decision - ALWAYS try to do something
         let built = false;
@@ -537,6 +580,7 @@ const AI = {
         this.movementHistory = [];
         this.movementPenalty = 0;
         this._lastDebugYear = 0;
+        this.updateVersionLabel();
         console.log(`🤖 AI ENABLED - Autoplay started [${this.version}]`);
         if(typeof Controller !== 'undefined' && Controller.toast) {
             Controller.toast(`AI Brain: ${this.version}`);

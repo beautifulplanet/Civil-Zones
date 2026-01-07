@@ -561,8 +561,9 @@
     </div>
 
     <!-- AI Training Panel -->
-    <div id="ai-training-panel" style="position: fixed; bottom: 10px; right: 10px; background: rgba(20, 20, 30, 0.95); color: rgb(255, 255, 255); padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; z-index: 9000; border: 2px solid rgb(74, 158, 255); min-width: 220px; display: block;">
-        <div style="font-weight:bold;font-size:14px;margin-bottom:10px;color:#4a9eff;">🤖 Q-Learning AI <span id="ai-version-label" style="color:#FFD700;font-size:12px;margin-left:8px;"></span></div>
+    <div id="ai-training-panel" style="position: fixed; bottom: 10px; right: 10px; background: rgba(20, 20, 30, 0.95); color: rgb(255, 255, 255); padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; z-index: 9000; border: 2px solid rgb(74, 158, 255); min-width: 280px; display: block;">
+        <div style="font-weight:bold;font-size:14px;margin-bottom:5px;color:#4a9eff;">🤖 Q-Learning AI</div>
+        <div id="ai-version-label" style="color:#FFD700;font-size:11px;margin-bottom:8px;padding:4px 8px;background:#2a2a3a;border-radius:4px;border:1px solid #FFD700;">Loading AI version...</div>
         <!-- Curriculum Phase Banner -->
         <div id="ai-phase-banner" style="background: rgb(21, 101, 192); padding: 6px; border-radius: 4px; text-align: center; margin-bottom: 8px; font-weight: bold;">🏗️ Phase 2: Building Cities (0/5 balanced)</div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 10px;margin-bottom:10px;">
@@ -710,6 +711,10 @@
                 // Initial update after short delay to ensure Game is initialized
                 setTimeout(function() {
                     updatePassYearButton();
+                    // Update AI version label
+                    if(typeof AI !== 'undefined' && AI.updateVersionLabel) {
+                        AI.updateVersionLabel();
+                    }
                 }, 100);
             });
             </script>
