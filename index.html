@@ -9,7 +9,8 @@
             --c-res: #4fc3f7; --c-com: #ffd54f; --c-ind: #ff7043; --c-wat: #00e5ff; --c-road: #8d6e63; --c-bull: #e57373;
             --accent: #4CAF50; --accent-hover: #66BB6A; --text-primary: #f0f0f0; --text-secondary: #b0b0b0; --text-muted: #888;
         }
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        /* Google Font loaded locally to avoid internet dependency */
+        /* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'); */
         html, body { margin: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #8B5CF6 0%, #3B82F6 50%, #10B981 100%); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
         
         #menubar { height: 70px; background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%); display: flex; align-items: center; padding: 0 25px; gap: 12px; border-bottom: 2px solid rgba(76, 175, 80, 0.3); z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.7), 0 2px 10px rgba(76, 175, 80, 0.2); }
@@ -598,6 +599,14 @@
             <button onclick="QLearningAI.saveBrainToFile()" style="padding:6px 10px;background:#6366F1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;" title="Download Q-table as JSON file">📥 Save AI</button>
             <button onclick="document.getElementById('qtable-file-input').click()" style="padding:6px 10px;background:#8B5CF6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;" title="Load Q-table from JSON file">📤 Load AI</button>
             <input type="file" id="qtable-file-input" accept=".json" style="display:none" onchange="QLearningAI.loadBrainFromFile(this.files[0])">
+            <button onclick="QLearningAI.clearMemory(true)" style="padding:6px 10px;background:#FF5722;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;" title="Clear memory to reduce RAM usage">🧹 Clear RAM</button>
+        </div>
+        <!-- MEMORY STATS -->
+        <div id="ai-memory-stats" style="margin-top:5px;padding:5px;background:#1a1a2a;border-radius:4px;font-size:10px;border:1px solid #555;">
+            <span style="color:#888;">💾 Memory:</span>
+            <span id="ai-mem-states" style="color:#fff;">0 states</span>
+            <span style="color:#888;"> | </span>
+            <span id="ai-mem-mb" style="color:#4CAF50;">0MB</span>
         </div>
         <!-- EXPLORATION TEST MODE -->
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;align-items:center;">
@@ -15772,6 +15781,7 @@
             
             // Q-table: state -> action -> value
             qTable: {},
+            maxQTableSize: 50000, // Limit Q-table to prevent memory explosion
             
             // Training stats
             episode: 0,
@@ -16505,8 +16515,37 @@
                 let maxNextQ = Math.max(...this.actions.map(a => this.getQ(nextState, a)));
                 let newQ = currentQ + this.learningRate * (reward + this.discountFactor * maxNextQ - currentQ);
                 
+                // Limit Q-table size to prevent memory explosion
+                let stateCount = Object.keys(this.qTable).length;
+                if(stateCount >= this.maxQTableSize) {
+                    // Remove oldest/lowest-value states
+                    this.pruneQTable();
+                }
+                
                 if(!this.qTable[state]) this.qTable[state] = {};
                 this.qTable[state][action] = newQ;
+            },
+            
+            // Prune Q-table to prevent memory explosion
+            pruneQTable: function() {
+                let states = Object.keys(this.qTable);
+                if(states.length < this.maxQTableSize * 0.9) return;
+                
+                // Calculate average Q-value per state
+                let stateScores = states.map(s => {
+                    let actions = this.qTable[s];
+                    let values = Object.values(actions);
+                    let maxQ = values.length > 0 ? Math.max(...values) : 0;
+                    return { state: s, score: maxQ };
+                });
+                
+                // Sort by score (lowest first) and remove bottom 20%
+                stateScores.sort((a, b) => a.score - b.score);
+                let removeCount = Math.floor(states.length * 0.2);
+                for(let i = 0; i < removeCount; i++) {
+                    delete this.qTable[stateScores[i].state];
+                }
+                console.log(`[AI] Pruned Q-table: removed ${removeCount} low-value states`);
             },
             
             // Choose action using epsilon-greedy policy - POPULATION MAXIMIZER
@@ -18590,6 +18629,64 @@
                 Controller.toast('🚨 AI HARD STOPPED');
             },
             
+            // Get memory usage stats
+            getMemoryStats: function() {
+                let qTableSize = Object.keys(this.qTable).length;
+                let bufferSize = (this.experienceBuffer || []).length;
+                let templateSize = (this.successTemplates || []).length;
+                let playbookSize = (this.savedPlaybooks || []).length;
+                
+                // Estimate memory usage (rough)
+                let estimatedMB = (JSON.stringify(this.qTable).length / 1024 / 1024).toFixed(2);
+                
+                return {
+                    qTableStates: qTableSize,
+                    experienceBuffer: bufferSize,
+                    templates: templateSize,
+                    playbooks: playbookSize,
+                    estimatedMB: estimatedMB
+                };
+            },
+            
+            // Clear memory to reduce usage
+            clearMemory: function(keepBest = true) {
+                let oldStats = this.getMemoryStats();
+                
+                // Clear Q-table
+                this.qTable = {};
+                
+                // Clear experience buffer but keep best if requested
+                if(keepBest && this.bestRunEver) {
+                    this.experienceBuffer = [this.bestRunEver];
+                } else {
+                    this.experienceBuffer = [];
+                }
+                
+                // Keep only top 3 templates
+                if(this.successTemplates && this.successTemplates.length > 3) {
+                    this.successTemplates = this.successTemplates.slice(0, 3);
+                }
+                
+                // Clear playbooks except best
+                if(this.savedPlaybooks && this.savedPlaybooks.length > 1) {
+                    this.savedPlaybooks = this.savedPlaybooks.slice(0, 1);
+                }
+                
+                // Clear movement history
+                if(this.movementHistory) this.movementHistory = [];
+                
+                // Clear death locations
+                if(this.exploreStats && this.exploreStats.deathLocations) {
+                    this.exploreStats.deathLocations = this.exploreStats.deathLocations.slice(-100);
+                }
+                
+                let newStats = this.getMemoryStats();
+                this.log(`🧹 Memory cleared: ${oldStats.qTableStates} → ${newStats.qTableStates} states, ${oldStats.estimatedMB}MB → ${newStats.estimatedMB}MB`);
+                Controller.toast(`🧹 Memory cleared! Was ${oldStats.estimatedMB}MB`);
+                
+                this.updateTrainingUI();
+            },
+            
             // Export stats to file
             exportStats: function() {
                 var stats = {
@@ -19753,6 +19850,19 @@ ${visited >= total ? '🏆 MAP 100% EXPLORED!' : `Progress: ${pct}% - Keep explo
                         phaseBanner.style.background = '#6a1b9a';
                         phaseBanner.innerHTML = '👑 Phase 3: Mastering Balance!';
                     }
+                }
+                
+                // Update memory stats
+                let memStats = this.getMemoryStats();
+                let memStatesEl = document.getElementById('ai-mem-states');
+                let memMbEl = document.getElementById('ai-mem-mb');
+                if(memStatesEl) memStatesEl.textContent = memStats.qTableStates + ' states';
+                if(memMbEl) {
+                    memMbEl.textContent = memStats.estimatedMB + 'MB';
+                    // Color code based on memory usage
+                    if(parseFloat(memStats.estimatedMB) > 100) memMbEl.style.color = '#f44336'; // Red > 100MB
+                    else if(parseFloat(memStats.estimatedMB) > 50) memMbEl.style.color = '#FF9800'; // Orange > 50MB
+                    else memMbEl.style.color = '#4CAF50'; // Green
                 }
                 
                 let btn = document.getElementById('ai-train-btn');

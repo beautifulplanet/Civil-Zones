@@ -93,9 +93,10 @@ const AI = {
         let recentMoves = this.movementHistory.slice(-10, -1);
         if(recentMoves.includes(posKey)) {
             this.movementPenalty++;
-            // Example penalty: reduce food by 1, log warning
+            // Example penalty: reduce food by 1
             if(game.food > 0) game.food--;
-            if(this.movementPenalty % 5 === 0) {
+            // Only log every 20 penalties to reduce spam
+            if(this.movementPenalty % 20 === 0) {
                 console.warn(`AI penalized for repeated walking (${this.movementPenalty} times)`);
             }
         }
@@ -183,10 +184,10 @@ const AI = {
         // Read UI state for smarter decisions
         let ui = this.readUIState(game);
         
-        // Debug: Log population, housing each year
-        if(game.year && game.year !== this._lastDebugYear) {
+        // Debug: Log population, housing every 10 years (reduced logging for performance)
+        if(game.year && game.year !== this._lastDebugYear && game.year % 10 === 0) {
             this._lastDebugYear = game.year;
-            console.log(`[AI DEBUG Y${ui.year}] Pop=${ui.pop}, Housing=${ui.housingCap}, Wells=${ui.wells}, NeedWells=${ui.wellsNeeded}, NeedHousing=${ui.housingNeeded}`);
+            console.log(`[AI Y${ui.year}] Pop=${ui.pop}, Wells=${ui.wells}, NeedWells=${ui.wellsNeeded}`);
         }
         
         // Analyze current city state
@@ -194,8 +195,13 @@ const AI = {
         
         // CRITICAL: Build wells FIRST if people are dying of thirst!
         if(ui.needsWells && ui.wellsNeeded > 0 && game.food >= 20) {
-            console.log(`[AI CRITICAL] Need ${ui.wellsNeeded} more wells! Building immediately.`);
+            // Only log critical messages once per crisis
+            if(!this._wellCrisisLogged) {
+                console.log(`[AI CRITICAL] Need ${ui.wellsNeeded} more wells!`);
+                this._wellCrisisLogged = true;
+            }
             if(this.tryBuild(game, 'WELL', 50)) {
+                this._wellCrisisLogged = false;
                 return; // Focus on wells until we have enough
             }
         }
