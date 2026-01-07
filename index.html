@@ -562,7 +562,7 @@
 
     <!-- AI Training Panel -->
     <div id="ai-training-panel" style="position: fixed; bottom: 10px; right: 10px; background: rgba(20, 20, 30, 0.95); color: rgb(255, 255, 255); padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; z-index: 9000; border: 2px solid rgb(74, 158, 255); min-width: 220px; display: block;">
-        <div style="font-weight:bold;font-size:14px;margin-bottom:10px;color:#4a9eff;">🤖 Q-Learning AI</div>
+        <div style="font-weight:bold;font-size:14px;margin-bottom:10px;color:#4a9eff;">🤖 Q-Learning AI <span id="ai-version-label" style="color:#FFD700;font-size:12px;margin-left:8px;"></span></div>
         <!-- Curriculum Phase Banner -->
         <div id="ai-phase-banner" style="background: rgb(21, 101, 192); padding: 6px; border-radius: 4px; text-align: center; margin-bottom: 8px; font-weight: bold;">🏗️ Phase 2: Building Cities (0/5 balanced)</div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 10px;margin-bottom:10px;">
@@ -7895,6 +7895,7 @@
 
             init(seed) {
                 Noise.init(seed); this.tiles = []; this.blds = []; this.res=0; this.food=0; this.year=0; this.pop=4; this.age=0;
+                this.peakPop = 4;  // Track highest population reached for game over screen
                 PROGRESSION.reset();
                 
                 // Initialize game state & inventory (see balance values above)
@@ -11357,6 +11358,11 @@
             recalc() {
                 let wSup=50, jobs=0, housing=0, comJobs=0, indJobs=0;
                 
+                // Track peak population for game over screen
+                if(this.pop > (this.peakPop || 0)) {
+                    this.peakPop = this.pop;
+                }
+                
                 // JIT HINT: Monomorphic array access pattern
                 const tilesArray = this.tiles;
                 const bldsArray = this.blds;
@@ -12279,7 +12285,10 @@
                     
                     // 2. PRODUCTION & CONSUMPTION
                     let housingCap = this.housingCap || 0;
-                    let homeless = Math.max(0, this.pop - housingCap);
+                    // Only count homeless if there ARE residential buildings - nomads don't need housing
+                    // This prevents plague from triggering in early game before any buildings exist
+                    let hasResBuildings = housingCap > 0;
+                    let homeless = hasResBuildings ? Math.max(0, this.pop - housingCap) : 0;
                     let housed = this.pop - homeless;
                     
                     // Calculate average zone level for food production scaling
@@ -15275,15 +15284,18 @@
             var dateStr = months[today.getMonth()] + ' ' + today.getDate() + ', ' + today.getFullYear();
             if(dateEl) dateEl.textContent = dateStr;
             
-            // Gather game state
-            var pop = Game.pop || 0;
+            // Gather game state - use peakPop for stats since current pop is often 0 at game over
+            var pop = Game.peakPop || Game.pop || 0;
             var food = Math.floor(Game.food || (Game.inventory ? Game.inventory.food : 0) || 0);
             var wood = Math.floor(Game.wood || (Game.inventory ? Game.inventory.wood : 0) || 0);
             var gameState = Game.gameState || 'WANDER';
             var year = Game.year || 0;
             
-            // Level 0 (WANDER) - Archaeological discovery article
-            if(gameState === 'WANDER' || reason === 'HUNTING') {
+            // Check if player ever established a settlement (had buildings beyond starter or high population)
+            var hadSettlement = (Game.blds && Game.blds.length > 0) || pop > 10 || gameState === 'CITY';
+            
+            // Level 0 (WANDER) - Archaeological discovery article (only if never settled)
+            if(!hadSettlement || reason === 'HUNTING') {
                 var fossilCount = Math.max(1, pop);
                 var siteAge = '2.' + Math.floor(Math.random()*9) + ' million';
                 // Vary headlines

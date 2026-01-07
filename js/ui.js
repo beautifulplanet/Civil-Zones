@@ -50,8 +50,13 @@ class UI {
             settleName: document.getElementById('settle-name'),
             settleConfirm: document.getElementById('settle-confirm'),
             settleCancel: document.getElementById('settle-cancel'),
+            // AI version label
+            aiVersionLabel: document.getElementById('ai-version-label'),
         };
-        
+        // Set AI version label if available
+        if(window.AI && this.elements.aiVersionLabel) {
+            this.elements.aiVersionLabel.textContent = AI.version || '';
+        }
         console.log('[UI] Initialized');
     }
 

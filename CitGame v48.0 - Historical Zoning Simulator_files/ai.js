@@ -30,11 +30,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const AI = {
+    version: 'AI v2026-01-07 HighGround+2x2+Roads',
     enabled: false,
     lastAction: 0,
     updateInterval: 150, // milliseconds between actions
     target: null, // Current movement/gathering target
     pathStuckTimer: null,
+    movementHistory: [], // Track last N moves
+    movementPenalty: 0, // Track penalty points
     
     // ═══════════════════════════════════════════════════════════════
     // MAIN UPDATE LOOP
@@ -42,15 +45,30 @@ const AI = {
     // ═══════════════════════════════════════════════════════════════
     update(game) {
         if(!this.enabled || !game.player) return;
-        
+
         let now = performance.now();
         if(now - this.lastAction < this.updateInterval) return;
         this.lastAction = now;
-        
+
+        // Track movement history and penalize repeated walking
+        let posKey = `${game.player.x},${game.player.y}`;
+        this.movementHistory.push(posKey);
+        if(this.movementHistory.length > 20) this.movementHistory.shift(); // Keep last 20 moves
+        // Penalize if revisiting a tile in last 10 moves
+        let recentMoves = this.movementHistory.slice(-10, -1);
+        if(recentMoves.includes(posKey)) {
+            this.movementPenalty++;
+            // Example penalty: reduce food by 1, log warning
+            if(game.food > 0) game.food--;
+            if(this.movementPenalty % 5 === 0) {
+                console.warn(`AI penalized for repeated walking (${this.movementPenalty} times)`);
+            }
+        }
+
         // Handle stuck pathfinding (timeout after 3 seconds)
         if(game.pathQueue.length > 0) {
             if(!this.pathStuckTimer) this.pathStuckTimer = now;
-            
+
             if(now - this.pathStuckTimer > 3000) {
                 console.warn('AI: Path stuck for 3s, clearing!', {
                     queueLength: game.pathQueue.length,
@@ -63,7 +81,7 @@ const AI = {
             return;
         }
         this.pathStuckTimer = null;
-        
+
         // Route to appropriate mode based on game state
         if(game.gameState === 'WANDER') {
             this.wanderMode(game);
@@ -127,18 +145,28 @@ const AI = {
     // CITY MODE - Strategic Building & Development
     // ═══════════════════════════════════════════════════════════════
     cityMode(game) {
+        // Debug: Log population, housing each year
+        if(game.year && game.year !== this._lastDebugYear) {
+            this._lastDebugYear = game.year;
+            let housingCap = game.housingCap || 0;
+            let pop = game.pop || 0;
+            let wells = game.blds ? game.blds.filter(b => b.t === 'WELL').length : 0;
+            console.log(`[AI DEBUG Y${game.year}] Pop=${pop}, Housing=${housingCap}, Wells=${wells}`);
+        }
+        
         // Analyze current city state
         let stats = this.analyzeCityState(game);
         
         // Make strategic building decision - ALWAYS try to do something
         let built = false;
         
-        // Priority 1: Build residential zones aggressively (DEFAULT TO LEVEL 1 IF UNLOCKED)
-        if(!built && stats.resZones < 50) {
-            // Choose Level 1 if unlocked and we have resources, else Level 0
+        // Priority 1: Pre-build homes before population growth
+        let housingCap = game.housingCap || 0;
+        let pop = game.pop || 0;
+        // If population is close to or exceeds housing, build more homes
+        if(!built && (housingCap - pop < 4 || stats.resZones < 50)) {
             let targetLevel = PROGRESSION.unlockedLevels.includes(1) ? 1 : 0;
             let levelCosts = CFG.BUILDING_LEVELS[targetLevel];
-            
             if(game.food >= levelCosts.food && game.wood >= levelCosts.wood) {
                 Controller.selectedBuildingLevel = targetLevel;
                 if(this.tryBuild(game, 'RES', 40)) {
@@ -161,15 +189,15 @@ const AI = {
             }
         }
         
-        // Priority 4: Commercial zones (1 per 5 residential)
-        if(!built && stats.comRatio < 0.2 && stats.resZones > 5 && game.food >= 75) {
+        // Priority 4: Commercial zones (1 per 4 residential)
+        if(!built && stats.comRatio < 0.25 && stats.resZones >= 4 && game.food >= 75) {
             if(this.tryBuild(game, 'COM', 25)) {
                 built = true;
             }
         }
-        
-        // Priority 5: Industrial (if unlocked, 1 per 8 residential) - NEW COST: 500 food + 100 wood
-        if(!built && PROGRESSION.industrialUnlocked && stats.indRatio < 0.15 && stats.resZones > 8 && game.food >= 500 && game.wood >= 100) {
+
+        // Priority 5: Industrial (if unlocked, 1 per 6 residential)
+        if(!built && PROGRESSION.industrialUnlocked && stats.indRatio < 0.17 && stats.resZones >= 6 && game.food >= 500 && game.wood >= 100) {
             if(this.tryBuild(game, 'IND', 30)) {
                 built = true;
             }
@@ -324,6 +352,28 @@ const AI = {
     },
     
     tryBuild(game, type, searchRadius) {
+        // Debug: Log build attempts
+        console.log(`[AI BUILD] Trying ${type} (radius=${searchRadius})`);
+        
+        // Helper to build a square road around a 2x2 block
+                function buildRoadLoop(game, x, y) {
+                    // Road coordinates around 2x2 block (x,y is top-left)
+                    let coords = [
+                        [x-1, y-1], [x, y-1], [x+1, y-1], [x+2, y-1],
+                        [x-1, y],                 [x+2, y],
+                        [x-1, y+1],               [x+2, y+1],
+                        [x-1, y+2], [x, y+2], [x+1, y+2], [x+2, y+2]
+                    ];
+                    for(let [rx, ry] of coords) {
+                        if(rx >= 0 && rx < CFG.W && ry >= 0 && ry < CFG.H) {
+                            if(game.tiles[rx][ry].type === 'GRASS' || game.tiles[rx][ry].type === 'SAND') {
+                                if(!game.tiles[rx][ry].path) {
+                                    try { game.build('PATH', rx, ry); } catch(e) {}
+                                }
+                            }
+                        }
+                    }
+                }
         // Find suitable location near existing development
         let centerX = game.player.x;
         let centerY = game.player.y;
@@ -346,27 +396,87 @@ const AI = {
             centerY = center.y;
         }
         
-        // Try multiple attempts with increasing search radius
-        for(let attempt = 0; attempt < 30; attempt++) {
-            let radius = Math.min(searchRadius, 5 + attempt * 2);
-            
-            // Random offset within radius
-            let dx = Math.floor(Math.random() * radius * 2) - radius;
-            let dy = Math.floor(Math.random() * radius * 2) - radius;
-            let x = Math.max(0, Math.min(CFG.W - 1, centerX + dx));
-            let y = Math.max(0, Math.min(CFG.H - 1, centerY + dy));
-            
-            if(this.isValidBuildLocation(game, type, x, y)) {
-                try {
-                    game.build(type, x, y);
-                    return true;
-                } catch(e) {
-                    // Continue trying
+        // For zone types, scan for highest-elevation valid 2x2 block in search area
+        if(type === 'RES' || type === 'COM' || type === 'IND') {
+            let bestBlock = null;
+            let bestElevation = -Infinity;
+            let minElevation = 0.05; // Avoid lowlands (tweak as needed)
+            let searchR = searchRadius;
+            for(let x = Math.max(0, centerX - searchR); x < Math.min(CFG.W - 1, centerX + searchR); x++) {
+                for(let y = Math.max(0, centerY - searchR); y < Math.min(CFG.H - 1, centerY + searchR); y++) {
+                    // Check 2x2 block validity
+                    let validBlock = true;
+                    let elevSum = 0;
+                    for(let dx2 = 0; dx2 < 2; dx2++) {
+                        for(let dy2 = 0; dy2 < 2; dy2++) {
+                            let tx = x + dx2, ty = y + dy2;
+                            if(tx >= CFG.W || ty >= CFG.H) { validBlock = false; continue; }
+                            let tile = game.tiles[tx][ty];
+                            if(!this.isValidBuildLocation(game, type, tx, ty)) validBlock = false;
+                            elevSum += tile.elevation || 0;
+                        }
+                    }
+                    let avgElev = elevSum / 4;
+                    // Check if road loop exists around block
+                    let roadLoopExists = true;
+                    let roadCoords = [
+                        [x-1, y-1], [x, y-1], [x+1, y-1], [x+2, y-1],
+                        [x-1, y],                 [x+2, y],
+                        [x-1, y+1],               [x+2, y+1],
+                        [x-1, y+2], [x, y+2], [x+1, y+2], [x+2, y+2]
+                    ];
+                    for(let [rx, ry] of roadCoords) {
+                        if(rx >= 0 && rx < CFG.W && ry >= 0 && ry < CFG.H) {
+                            let tile = game.tiles[rx][ry];
+                            if(tile.type === 'GRASS' || tile.type === 'SAND') {
+                                if(!tile.path) roadLoopExists = false;
+                            }
+                        }
+                    }
+                    if(validBlock && avgElev > bestElevation && avgElev >= minElevation) {
+                        bestBlock = {x, y, roadLoopExists};
+                        bestElevation = avgElev;
+                    }
                 }
             }
+            if(bestBlock) {
+                let {x, y, roadLoopExists} = bestBlock;
+                if(!roadLoopExists) {
+                    console.log(`[AI BUILD] Building road loop around (${x},${y}) first`);
+                    buildRoadLoop(game, x, y);
+                    return false;
+                }
+                try {
+                    for(let dx2 = 0; dx2 < 2; dx2++) {
+                        for(let dy2 = 0; dy2 < 2; dy2++) {
+                            game.build(type, x + dx2, y + dy2);
+                        }
+                    }
+                    console.log(`[AI BUILD] SUCCESS: Built 2x2 ${type} at (${x},${y}) elev=${bestElevation.toFixed(2)}`);
+                    return true;
+                } catch(e) {
+                    console.log(`[AI BUILD] FAILED: ${type} at (${x},${y}) - ${e.message}`);
+                }
+            }
+            console.log(`[AI BUILD] No valid 2x2 block found for ${type}`);
+            return false;
+        } else {
+            // Non-zone types (WELL, PATH) build single tile
+            for(let attempt = 0; attempt < 30; attempt++) {
+                let radius = Math.min(searchRadius, 5 + attempt * 2);
+                let dx = Math.floor(Math.random() * radius * 2) - radius;
+                let dy = Math.floor(Math.random() * radius * 2) - radius;
+                let x = Math.max(0, Math.min(CFG.W - 1, centerX + dx));
+                let y = Math.max(0, Math.min(CFG.H - 1, centerY + dy));
+                if(this.isValidBuildLocation(game, type, x, y)) {
+                    try {
+                        game.build(type, x, y);
+                        return true;
+                    } catch(e) {}
+                }
+            }
+            return false;
         }
-        
-        return false;
     },
     
     isValidBuildLocation(game, type, x, y) {
@@ -424,7 +534,13 @@ const AI = {
     enable() {
         this.enabled = true;
         this.lastAction = performance.now();
-        console.log('🤖 AI ENABLED - Autoplay started');
+        this.movementHistory = [];
+        this.movementPenalty = 0;
+        this._lastDebugYear = 0;
+        console.log(`🤖 AI ENABLED - Autoplay started [${this.version}]`);
+        if(typeof Controller !== 'undefined' && Controller.toast) {
+            Controller.toast(`AI Brain: ${this.version}`);
+        }
     },
     
     disable() {
