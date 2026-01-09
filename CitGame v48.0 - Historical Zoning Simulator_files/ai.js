@@ -72,7 +72,7 @@ const AI = {
     updateVersionLabel() {
         let label = document.getElementById('ai-version-label');
         if(label) label.textContent = this.version;
-    }
+    },
     
     // ═══════════════════════════════════════════════════════════════
     // MAIN UPDATE LOOP
@@ -80,6 +80,13 @@ const AI = {
     // ═══════════════════════════════════════════════════════════════
     update(game) {
         if(!this.enabled || !game.player) return;
+        
+        // STOP AI if game is over!
+        if(game.gameOver) {
+            this.enabled = false;
+            console.log('[AI] Game over detected - AI disabled');
+            return;
+        }
 
         let now = performance.now();
         if(now - this.lastAction < this.updateInterval) return;

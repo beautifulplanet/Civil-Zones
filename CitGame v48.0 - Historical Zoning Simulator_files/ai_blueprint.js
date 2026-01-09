@@ -1,491 +1,639 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// CIVIL ZONES - BLUEPRINT-BASED AI SYSTEM
+// CIVIL ZONES - SMART LEARNING AI v3.0
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// This replaces Q-Learning with a deterministic, blueprint-based approach.
-// The AI follows predefined city layouts and knows exactly what to build where.
+// A hybrid AI that combines:
+// 1. Rule-based decisions (expert knowledge you teach it)
+// 2. Pattern learning (saves what works, remembers failures)
+// 3. City blueprints (proven layouts it can follow/adapt)
 //
-// PHILOSOPHY:
-// - Complex cities = simple rules applied consistently
-// - AI doesn't "learn" - it executes proven strategies
-// - User can define city styles/blueprints
-// - Predictable, controllable, scalable to millions of population
+// BUILD STRATEGIES (alternates between 3):
+// Strategy 1: "Starter" - Your exact pattern (1 RES, 1 WELL, 2 ROAD, wait, expand)
+// Strategy 2: "Balanced" - 4:1:2 ratio (R:C:I)
+// Strategy 3: "Housing Heavy" - 6:1:1 ratio (R:C:I)
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const BlueprintAI = {
-    version: 'Blueprint AI v1.0',
+    version: 'Smart Learning AI v3.0',
     enabled: false,
-    currentBlueprint: null,
-    buildQueue: [],
     lastAction: 0,
-    updateInterval: 100,
+    updateInterval: 200,
     
     // ═══════════════════════════════════════════════════════════════
-    // CITY BLUEPRINTS - Predefined successful city patterns
+    // BUILD STRATEGIES - Alternates between these 3
     // ═══════════════════════════════════════════════════════════════
-    
-    blueprints: {
-        // GRID CITY: Classic SimCity-style grid layout
-        // Wells in center, residential in rings, commercial on corners
-        grid: {
-            name: 'Grid City',
-            description: 'Classic grid pattern with wells in center',
-            targetPop: 100000,
-            
-            // The pattern repeats in "blocks"
-            // Each block is 6x6 tiles
-            blockSize: 6,
-            
-            // Block layout (relative positions)
-            // W=Well, R=Residential, C=Commercial, I=Industrial, .=Road
-            blockPattern: [
-                '.', '.', '.', '.', '.', '.',
-                '.', 'R', 'R', 'R', 'R', '.',
-                '.', 'R', 'W', 'W', 'R', '.',
-                '.', 'R', 'W', 'W', 'R', '.',
-                '.', 'R', 'R', 'R', 'R', '.',
-                '.', '.', '.', '.', '.', '.'
+    strategies: {
+        current: 0, // Which strategy we're using (0, 1, or 2)
+        cycleCount: 0, // How many full build cycles completed
+        
+        // Strategy 0: YOUR EXACT STARTER PATTERN
+        // 1 RES → 1 WELL → 2 ROADS → wait 8 years → 1 RES → wait → 1 RES → 
+        // wait → 2 COM → roads → 2 IND → roads
+        STARTER: {
+            name: 'Starter',
+            sequence: [
+                { type: 'RES', count: 1 },
+                { type: 'WELL', count: 1 },
+                { type: 'ROAD', count: 2 },
+                { type: 'WAIT', years: 8 },
+                { type: 'RES', count: 1 },
+                { type: 'WAIT', years: 5 },
+                { type: 'RES', count: 1 },
+                { type: 'WAIT', years: 5 },
+                { type: 'COM', count: 2 },
+                { type: 'ROAD', count: 2 },
+                { type: 'IND', count: 2 },
+                { type: 'ROAD', count: 2 },
             ],
-            
-            // How many blocks to build in each ring
-            rings: [
-                { radius: 1, blocks: 4, type: 'core' },      // Center: 4 blocks (pop ~3200)
-                { radius: 2, blocks: 8, type: 'inner' },     // Inner ring: 8 blocks
-                { radius: 3, blocks: 12, type: 'middle' },   // Middle ring
-                { radius: 4, blocks: 16, type: 'outer' },    // Outer ring
-                { radius: 5, blocks: 20, type: 'suburbs' }   // Suburbs
-            ],
-            
-            // Ratios per block
-            perBlock: {
-                wells: 4,        // 4 wells per block = 400 water capacity
-                residential: 8,  // 8 RES = ~800 housing if upgraded
-                roads: 20        // Border roads
-            }
+            step: 0,
+            subStep: 0, // For counting within a step (e.g., 2 roads)
+            waitStartYear: 0
         },
         
-        // LINEAR CITY: Long strip along a river/road
-        linear: {
-            name: 'Linear City',
-            description: 'Long strip city, good for rivers',
-            targetPop: 50000,
-            
-            // Build in segments along X axis
-            segmentWidth: 4,
-            segmentPattern: ['R', 'W', 'R', '.'],
-            
-            // Grow by adding segments
-            maxSegments: 100
+        // Strategy 1: BALANCED (4:1:2)
+        BALANCED: {
+            name: 'Balanced',
+            ratio: { R: 4, C: 1, I: 2 },
+            roadsPerBuilding: 0.5
         },
         
-        // DISTRICT CITY: Separate zones for R/C/I
-        district: {
-            name: 'District City',
-            description: 'Separated residential, commercial, industrial zones',
-            targetPop: 200000,
-            
-            // Zone placement
-            zones: {
-                residential: { startX: 0, startY: 0, width: 20, height: 20 },
-                commercial: { startX: 22, startY: 0, width: 10, height: 10 },
-                industrial: { startX: 22, startY: 12, width: 10, height: 10 },
-                wells: { startX: 10, startY: 10, width: 4, height: 4 }  // Central water district
-            }
-        },
-        
-        // RADIAL CITY: Circular pattern expanding from center
-        radial: {
-            name: 'Radial City',
-            description: 'Circular expansion from central plaza',
-            targetPop: 500000,
-            
-            // Center is a plaza with wells
-            center: { type: 'WELL', count: 9 },  // 3x3 wells = 900 water
-            
-            // Rings expand outward
-            rings: [
-                { radius: 3, types: ['RES', 'RES', 'RES', 'RES'] },
-                { radius: 5, types: ['RES', 'COM', 'RES', 'COM'] },
-                { radius: 7, types: ['RES', 'RES', 'IND', 'RES'] },
-                { radius: 9, types: ['RES', 'COM', 'RES', 'IND'] }
-            ]
+        // Strategy 2: HOUSING HEAVY (6:1:1)
+        HOUSING_HEAVY: {
+            name: 'Housing Heavy',
+            ratio: { R: 6, C: 1, I: 1 },
+            roadsPerBuilding: 0.3
         }
     },
     
     // ═══════════════════════════════════════════════════════════════
-    // CITY RULES - The "wisdom" of city building
-    // These are FACTS, not learned patterns
+    // LEARNED KNOWLEDGE (persisted to localStorage)
     // ═══════════════════════════════════════════════════════════════
-    
-    rules: {
-        // WATER: 1 well per 100 people, ALWAYS build wells FIRST
-        water: {
-            wellCapacity: 100,
-            safetyBuffer: 1.2,  // 20% extra capacity
-            
-            // Calculate wells needed for target population
-            wellsNeeded: function(pop) {
-                return Math.ceil(pop / this.wellCapacity * this.safetyBuffer);
-            }
+    memory: {
+        patterns: [],
+        stats: {
+            gamesPlayed: 0,
+            bestPop: 0,
+            avgSurvivalYears: 0,
+            successfulActions: {},
+            failedActions: {}
         },
-        
-        // HOUSING: Build residential to match well capacity
-        housing: {
-            perWell: 100,  // Don't exceed water capacity
-            
-            // Residential building capacities by level
-            capacity: {
-                1: 10,   // Hut
-                2: 25,   // House
-                3: 50,   // Manor
-                4: 100,  // Apartment
-                5: 250,  // Tower
-                6: 500   // Skyscraper
-            }
-        },
-        
-        // RATIOS: Optimal R:C:I balance
-        ratios: {
-            residential: 0.60,  // 60% of zones
-            commercial: 0.25,   // 25% of zones
-            industrial: 0.15    // 15% of zones
-        },
-        
-        // SPACING: How far apart buildings should be
-        spacing: {
-            wellFromWell: 3,      // Wells should be 3+ tiles apart
-            resFromRes: 1,        // RES can be adjacent
-            indFromRes: 5,        // Industrial away from residential
-            roadInterval: 4       // Road every 4 tiles
-        }
+        blueprints: [],
+        watchedActions: []
     },
     
     // ═══════════════════════════════════════════════════════════════
-    // MAIN AI LOOP
+    // CORE RULES
+    // ═══════════════════════════════════════════════════════════════
+    RULES: {
+        WATER_PER_WELL: 100,
+        MIN_WELLS_BEFORE_BUILDING: 1,
+        WATER_SAFETY_MARGIN: 1.3,
+        HOUSING_PER_RES: 10,
+        MAX_HOUSING_ABOVE_WATER: 0,
+        TARGET_RATIO: { R: 4, C: 1, I: 2 },
+        ROADS_PER_BUILDING: 0.5,
+        ROAD_COST: 5,
+        WELL_COST: 50,
+        RES_COST_FOOD: 100,
+        RES_COST_WOOD: 100,
+        COM_COST_FOOD: 150,
+        COM_COST_WOOD: 100,
+        IND_COST_FOOD: 200,
+        IND_COST_WOOD: 150,
+    },
+    
+    // ═══════════════════════════════════════════════════════════════
+    // TRACKING STATE
+    // ═══════════════════════════════════════════════════════════════
+    cityCenter: null,
+    currentRing: 0,
+    lastBuildType: null,
+    buildSequence: 0,
+    builtRoadPositions: new Set(),
+    lastYear: 0,
+    
+    stats: {
+        totalBuilt: 0,
+        wellsBuilt: 0,
+        resBuilt: 0,
+        comBuilt: 0,
+        indBuilt: 0,
+        roadsBuilt: 0,
+        turnsAdvanced: 0
+    },
+    
+    // ═══════════════════════════════════════════════════════════════
+    // MAIN UPDATE LOOP
     // ═══════════════════════════════════════════════════════════════
     
     update: function(game) {
         if (!this.enabled || !game) return;
         
+        // STOP AI if game is over!
+        if (game.gameOver) {
+            this.enabled = false;
+            console.log('[AI v3] Game over detected - AI disabled');
+            return;
+        }
+        
         let now = performance.now();
         if (now - this.lastAction < this.updateInterval) return;
         this.lastAction = now;
         
-        // WANDER mode: Gather resources and settle
-        if (game.gameState === 'WANDER') {
-            this.wanderPhase(game);
-            return;
+        if (game.gameState !== 'CITY') return;
+        
+        if (!this.cityCenter && game.player) {
+            this.cityCenter = { x: game.player.x, y: game.player.y };
+            console.log('[AI v3] City center:', this.cityCenter);
+            this.loadMemory();
         }
         
-        // CITY mode: Execute blueprint
-        if (game.gameState === 'CITY') {
-            this.buildPhase(game);
-            return;
+        // Track year for waiting
+        let currentYear = game.year || 0;
+        if (currentYear !== this.lastYear) {
+            this.lastYear = currentYear;
+        }
+        
+        // Run the appropriate strategy
+        this.runStrategy(game);
+    },
+    
+    // ═══════════════════════════════════════════════════════════════
+    // RUN STRATEGY - Switches between 3 strategies
+    // ═══════════════════════════════════════════════════════════════
+    
+    runStrategy: function(game) {
+        let strategyIndex = this.strategies.current;
+        
+        if (strategyIndex === 0) {
+            // Strategy 0: Your exact starter pattern
+            this.runStarterStrategy(game);
+        } else if (strategyIndex === 1) {
+            // Strategy 1: Balanced 4:1:2
+            this.RULES.TARGET_RATIO = this.strategies.BALANCED.ratio;
+            this.smartBuild(game);
+        } else {
+            // Strategy 2: Housing Heavy 6:1:1
+            this.RULES.TARGET_RATIO = this.strategies.HOUSING_HEAVY.ratio;
+            this.smartBuild(game);
         }
     },
     
     // ═══════════════════════════════════════════════════════════════
-    // WANDER PHASE: Quick resource gathering, then settle
+    // STARTER STRATEGY - Your exact build pattern!
     // ═══════════════════════════════════════════════════════════════
     
-    wanderPhase: function(game) {
-        // Simple wander: collect resources until we can settle
-        let pop = game.pop || 0;
-        let food = game.inventory ? game.inventory.food : 0;
-        let wood = game.inventory ? game.inventory.wood : 0;
+    runStarterStrategy: function(game) {
+        let starter = this.strategies.STARTER;
+        let state = this.analyzeCity(game);
+        let currentYear = game.year || 0;
         
-        // Settle requirements (be generous)
-        let canSettle = pop >= 5 && food >= 100 && wood >= 30;
+        // Check if we finished the starter sequence
+        if (starter.step >= starter.sequence.length) {
+            console.log('[AI v3] 🎉 Starter sequence complete! Switching to Balanced strategy.');
+            this.strategies.current = 1; // Switch to Balanced
+            starter.step = 0;
+            starter.subStep = 0;
+            this.strategies.cycleCount++;
+            return;
+        }
         
-        // Check if near water
-        let nearWater = this.isNearWater(game);
+        let currentAction = starter.sequence[starter.step];
+        console.log('[AI v3] Starter Step ' + starter.step + ': ' + currentAction.type + 
+                    (currentAction.count ? ' x' + currentAction.count : '') +
+                    (currentAction.years ? ' (wait ' + currentAction.years + ' years)' : ''));
         
-        if (canSettle && nearWater) {
-            // SETTLE!
-            if (typeof game.settleHere === 'function') {
-                game.settleHere();
-                console.log('[Blueprint AI] Settled! Starting city construction.');
-                this.initializeBlueprint(game);
+        // Handle WAIT action
+        if (currentAction.type === 'WAIT') {
+            if (starter.waitStartYear === 0) {
+                starter.waitStartYear = currentYear;
+                console.log('[AI v3] ⏳ Waiting ' + currentAction.years + ' years (started at year ' + currentYear + ')');
+            }
+            
+            let yearsWaited = currentYear - starter.waitStartYear;
+            if (yearsWaited >= currentAction.years) {
+                console.log('[AI v3] ✓ Wait complete! Moving to next step.');
+                starter.step++;
+                starter.subStep = 0;
+                starter.waitStartYear = 0;
+            } else {
+                // Just pass the year
+                if (typeof game.endTurn === 'function') {
+                    game.endTurn();
+                    this.stats.turnsAdvanced++;
+                }
             }
             return;
         }
         
-        // Keep wandering to gather resources
-        if (typeof game.moveRandom === 'function') {
-            game.moveRandom();
-        }
-    },
-    
-    // ═══════════════════════════════════════════════════════════════
-    // BUILD PHASE: Execute the blueprint
-    // ═══════════════════════════════════════════════════════════════
-    
-    buildPhase: function(game) {
-        let pop = game.pop || 0;
-        let food = game.food || 0;
-        let wood = game.wood || 0;
-        let wellCount = game.wellCount || 0;
-        let housingCap = game.housingCap || 0;
-        
-        // PRIORITY 1: WELLS (most critical)
-        let wellsNeeded = this.rules.water.wellsNeeded(pop + 100); // Plan ahead
-        if (wellCount < wellsNeeded && food >= 50) {
-            this.buildWell(game);
-            return;
-        }
-        
-        // PRIORITY 2: HOUSING (if at capacity)
-        if (pop >= housingCap - 5 && food >= 100 && wood >= 100) {
-            this.buildResidential(game);
-            return;
-        }
-        
-        // PRIORITY 3: EXPAND according to blueprint
-        if (this.buildQueue.length > 0) {
-            this.executeNextBuild(game);
-            return;
-        }
-        
-        // PRIORITY 4: End turn to grow population
-        if (typeof game.endTurn === 'function') {
-            game.endTurn();
-        }
-    },
-    
-    // ═══════════════════════════════════════════════════════════════
-    // BLUEPRINT EXECUTION
-    // ═══════════════════════════════════════════════════════════════
-    
-    initializeBlueprint: function(game) {
-        // Default to grid city
-        this.currentBlueprint = this.blueprints.grid;
-        this.buildQueue = [];
-        
-        // Generate build queue from blueprint
-        this.generateBuildQueue(game);
-        
-        console.log(`[Blueprint AI] Initialized ${this.currentBlueprint.name}`);
-        console.log(`[Blueprint AI] Build queue: ${this.buildQueue.length} items`);
-    },
-    
-    generateBuildQueue: function(game) {
-        let bp = this.currentBlueprint;
-        let centerX = game.player ? game.player.x : 50;
-        let centerY = game.player ? game.player.y : 50;
-        
-        // For grid city: generate blocks around center
-        if (bp.name === 'Grid City') {
-            this.generateGridCity(centerX, centerY, bp);
-        }
-    },
-    
-    generateGridCity: function(centerX, centerY, bp) {
-        let blockSize = bp.blockSize;
-        
-        // Start with core block (center)
-        this.addBlockToBuildQueue(centerX, centerY, bp.blockPattern, blockSize);
-        
-        // Add surrounding blocks in rings
-        for (let ring of bp.rings) {
-            let offsets = this.getRingOffsets(ring.radius, blockSize);
-            for (let offset of offsets) {
-                let bx = centerX + offset.x;
-                let by = centerY + offset.y;
-                this.addBlockToBuildQueue(bx, by, bp.blockPattern, blockSize);
-            }
-        }
-    },
-    
-    addBlockToBuildQueue: function(startX, startY, pattern, blockSize) {
-        // First pass: Roads (foundation)
-        for (let i = 0; i < pattern.length; i++) {
-            if (pattern[i] === '.') {
-                let x = startX + (i % blockSize);
-                let y = startY + Math.floor(i / blockSize);
-                this.buildQueue.push({ type: 'ROAD', x: x, y: y });
-            }
-        }
-        
-        // Second pass: Wells (critical infrastructure)
-        for (let i = 0; i < pattern.length; i++) {
-            if (pattern[i] === 'W') {
-                let x = startX + (i % blockSize);
-                let y = startY + Math.floor(i / blockSize);
-                this.buildQueue.push({ type: 'WELL', x: x, y: y });
-            }
-        }
-        
-        // Third pass: Residential
-        for (let i = 0; i < pattern.length; i++) {
-            if (pattern[i] === 'R') {
-                let x = startX + (i % blockSize);
-                let y = startY + Math.floor(i / blockSize);
-                this.buildQueue.push({ type: 'RES', x: x, y: y });
-            }
-        }
-        
-        // Fourth pass: Commercial
-        for (let i = 0; i < pattern.length; i++) {
-            if (pattern[i] === 'C') {
-                let x = startX + (i % blockSize);
-                let y = startY + Math.floor(i / blockSize);
-                this.buildQueue.push({ type: 'COM', x: x, y: y });
-            }
-        }
-        
-        // Fifth pass: Industrial
-        for (let i = 0; i < pattern.length; i++) {
-            if (pattern[i] === 'I') {
-                let x = startX + (i % blockSize);
-                let y = startY + Math.floor(i / blockSize);
-                this.buildQueue.push({ type: 'IND', x: x, y: y });
-            }
-        }
-    },
-    
-    getRingOffsets: function(radius, blockSize) {
-        let offsets = [];
-        let d = radius * blockSize;
-        
-        // Top and bottom
-        for (let x = -radius; x <= radius; x++) {
-            offsets.push({ x: x * blockSize, y: -d });
-            offsets.push({ x: x * blockSize, y: d });
-        }
-        
-        // Left and right (excluding corners)
-        for (let y = -radius + 1; y < radius; y++) {
-            offsets.push({ x: -d, y: y * blockSize });
-            offsets.push({ x: d, y: y * blockSize });
-        }
-        
-        return offsets;
-    },
-    
-    executeNextBuild: function(game) {
-        if (this.buildQueue.length === 0) return;
-        
-        let next = this.buildQueue[0];
-        let cost = this.getBuildCost(next.type);
+        // Handle build actions
+        let targetCount = currentAction.count || 1;
         
         // Check if we can afford it
-        if (game.food >= cost.food && game.wood >= cost.wood) {
-            // Try to build
-            if (typeof game.build === 'function') {
-                try {
-                    game.build(next.type, next.x, next.y);
-                    this.buildQueue.shift(); // Remove from queue
-                    console.log(`[Blueprint AI] Built ${next.type} at (${next.x}, ${next.y})`);
-                } catch (e) {
-                    // Can't build here, skip
-                    this.buildQueue.shift();
+        if (!this.canAfford(state, currentAction.type)) {
+            // Wait for resources
+            if (typeof game.endTurn === 'function') {
+                game.endTurn();
+                this.stats.turnsAdvanced++;
+            }
+            return;
+        }
+        
+        // Water check for RES
+        if (currentAction.type === 'RES' && state.waterCap <= state.housingCap) {
+            // Need more water first!
+            if (state.food >= this.RULES.WELL_COST) {
+                console.log('[AI v3] Need water before RES! Building well first.');
+                this.buildNearCenter(game, 'WELL', 0);
+            } else {
+                if (typeof game.endTurn === 'function') game.endTurn();
+            }
+            return;
+        }
+        
+        // Build the thing
+        let built = false;
+        if (currentAction.type === 'ROAD') {
+            built = this.buildRoadNearBuilding(game, state);
+        } else {
+            built = this.buildNearCenter(game, currentAction.type, this.currentRing);
+        }
+        
+        if (built) {
+            starter.subStep++;
+            console.log('[AI v3] Built ' + currentAction.type + ' (' + starter.subStep + '/' + targetCount + ')');
+            
+            if (starter.subStep >= targetCount) {
+                starter.step++;
+                starter.subStep = 0;
+                
+                // Expand ring after RES builds
+                if (currentAction.type === 'RES') {
+                    this.currentRing++;
                 }
             }
-        }
-    },
-    
-    getBuildCost: function(type) {
-        // Use game config if available
-        switch (type) {
-            case 'WELL': return { food: 50, wood: 0 };
-            case 'RES': return { food: 100, wood: 100 };
-            case 'COM': return { food: 200, wood: 200 };
-            case 'IND': return { food: 1000, wood: 1000 };
-            case 'ROAD': return { food: 5, wood: 0 };
-            default: return { food: 100, wood: 100 };
+        } else {
+            // Couldn't build, pass turn
+            if (typeof game.endTurn === 'function') {
+                game.endTurn();
+                this.stats.turnsAdvanced++;
+            }
         }
     },
     
     // ═══════════════════════════════════════════════════════════════
-    // HELPER FUNCTIONS
+    // SMART BUILD - For Balanced and Housing Heavy strategies
     // ═══════════════════════════════════════════════════════════════
     
-    buildWell: function(game) {
-        // Find best spot for well (high ground, near center)
-        let centerX = game.player ? game.player.x : 50;
-        let centerY = game.player ? game.player.y : 50;
+    smartBuild: function(game) {
+        let state = this.analyzeCity(game);
         
-        // Search in expanding rings
-        for (let r = 1; r <= 20; r++) {
-            for (let dx = -r; dx <= r; dx++) {
-                for (let dy = -r; dy <= r; dy++) {
-                    if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-                    
-                    let x = centerX + dx;
-                    let y = centerY + dy;
-                    
-                    if (this.canBuildAt(game, x, y)) {
-                        if (typeof game.build === 'function') {
-                            game.build('WELL', x, y);
-                            console.log(`[Blueprint AI] Built WELL at (${x}, ${y})`);
-                            return;
-                        }
-                    }
+        if (this.stats.totalBuilt % 10 === 0) {
+            console.log('[AI v3] Strategy: ' + (this.strategies.current === 1 ? 'Balanced 4:1:2' : 'Housing Heavy 6:1:1'));
+            console.log('[AI v3] State:', JSON.stringify({
+                pop: state.pop, wells: state.wells, res: state.resCount, 
+                com: state.comCount, ind: state.indCount
+            }));
+        }
+        
+        // Check if we should switch strategies (every ~20 buildings)
+        let totalZones = state.resCount + state.comCount + state.indCount;
+        if (totalZones > 0 && totalZones % 20 === 0 && this.lastSwitchCount !== totalZones) {
+            this.lastSwitchCount = totalZones;
+            this.strategies.current = (this.strategies.current + 1) % 3;
+            console.log('[AI v3] 🔄 Switching to strategy ' + this.strategies.current + 
+                        ' (' + ['Starter', 'Balanced', 'Housing Heavy'][this.strategies.current] + ')');
+            
+            if (this.strategies.current === 0) {
+                // Reset starter sequence
+                this.strategies.STARTER.step = 0;
+                this.strategies.STARTER.subStep = 0;
+            }
+            return;
+        }
+        
+        // PRIORITY 1: WATER
+        if (state.wells === 0 && state.food >= this.RULES.WELL_COST) {
+            return this.buildNearCenter(game, 'WELL', 0);
+        }
+        
+        let waterUsage = state.pop / Math.max(1, state.waterCap);
+        if (waterUsage > 0.7 && state.food >= this.RULES.WELL_COST) {
+            return this.buildNearCenter(game, 'WELL', Math.min(state.wells * 2, 10));
+        }
+        
+        let wellsNeeded = Math.ceil(state.housingCap / this.RULES.WATER_PER_WELL * this.RULES.WATER_SAFETY_MARGIN);
+        wellsNeeded = Math.max(wellsNeeded, 2);
+        
+        if (state.wells < wellsNeeded && state.food >= this.RULES.WELL_COST) {
+            return this.buildNearCenter(game, 'WELL', Math.min(state.wells * 2, 10));
+        }
+        
+        // PRIORITY 2: ROADS
+        let totalBuildings = state.resCount + state.comCount + state.indCount;
+        let roadsNeeded = Math.floor(totalBuildings * this.RULES.ROADS_PER_BUILDING);
+        
+        if (state.roadCount < roadsNeeded && state.food >= this.RULES.ROAD_COST) {
+            if (this.buildRoadNearBuilding(game, state)) return;
+        }
+        
+        // PRIORITY 3: BUILDINGS (based on ratio)
+        let canAddBuilding = state.waterCap > state.housingCap;
+        
+        if (canAddBuilding) {
+            let buildType = this.getNextBuildType(state);
+            
+            if (buildType === 'RES' && this.canAfford(state, 'RES')) {
+                if (this.buildNearCenter(game, 'RES', this.currentRing)) {
+                    this.buildSequence++;
+                    if (state.resCount > 0 && state.resCount % 3 === 0) this.currentRing++;
+                    return;
                 }
+            }
+            
+            if (buildType === 'COM' && this.canAfford(state, 'COM')) {
+                if (this.buildNearCenter(game, 'COM', this.currentRing)) {
+                    this.buildSequence++;
+                    return;
+                }
+            }
+            
+            if (buildType === 'IND' && this.canAfford(state, 'IND')) {
+                if (this.buildNearCenter(game, 'IND', this.currentRing)) {
+                    this.buildSequence++;
+                    return;
+                }
+            }
+        }
+        
+        // PRIORITY 4: WAIT
+        if (typeof game.endTurn === 'function') {
+            game.endTurn();
+            this.stats.turnsAdvanced++;
+            
+            if (this.stats.turnsAdvanced % 10 === 0) {
+                this.saveSnapshot(state);
             }
         }
     },
     
-    buildResidential: function(game) {
-        let centerX = game.player ? game.player.x : 50;
-        let centerY = game.player ? game.player.y : 50;
+    // ═══════════════════════════════════════════════════════════════
+    // GET NEXT BUILD TYPE - Based on current ratio
+    // ═══════════════════════════════════════════════════════════════
+    
+    getNextBuildType: function(state) {
+        let r = state.resCount || 0;
+        let c = state.comCount || 0;
+        let i = state.indCount || 0;
         
-        for (let r = 1; r <= 30; r++) {
-            for (let dx = -r; dx <= r; dx++) {
-                for (let dy = -r; dy <= r; dy++) {
-                    if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-                    
-                    let x = centerX + dx;
-                    let y = centerY + dy;
-                    
-                    if (this.canBuildAt(game, x, y)) {
-                        if (typeof game.build === 'function') {
-                            game.build('RES', x, y);
-                            console.log(`[Blueprint AI] Built RES at (${x}, ${y})`);
-                            return;
-                        }
-                    }
+        let total = r + c + i + 1;
+        let rRatio = r / total;
+        let cRatio = c / total;
+        let iRatio = i / total;
+        
+        let targetTotal = this.RULES.TARGET_RATIO.R + this.RULES.TARGET_RATIO.C + this.RULES.TARGET_RATIO.I;
+        let rTarget = this.RULES.TARGET_RATIO.R / targetTotal;
+        let cTarget = this.RULES.TARGET_RATIO.C / targetTotal;
+        let iTarget = this.RULES.TARGET_RATIO.I / targetTotal;
+        
+        let rDeficit = rTarget - rRatio;
+        let cDeficit = cTarget - cRatio;
+        let iDeficit = iTarget - iRatio;
+        
+        // Build what's most needed
+        if (rDeficit >= cDeficit && rDeficit >= iDeficit) return 'RES';
+        if (iDeficit >= cDeficit) return 'IND';
+        return 'COM';
+    },
+    
+    canAfford: function(state, type) {
+        if (type === 'RES') return state.food >= this.RULES.RES_COST_FOOD && state.wood >= this.RULES.RES_COST_WOOD;
+        if (type === 'COM') return state.food >= this.RULES.COM_COST_FOOD && state.wood >= this.RULES.COM_COST_WOOD;
+        if (type === 'IND') return state.food >= this.RULES.IND_COST_FOOD && state.wood >= this.RULES.IND_COST_WOOD;
+        if (type === 'WELL') return state.food >= this.RULES.WELL_COST;
+        if (type === 'ROAD') return state.food >= this.RULES.ROAD_COST;
+        return false;
+    },
+    
+    // ═══════════════════════════════════════════════════════════════
+    // BUILD ROAD NEAR BUILDING - Smart placement (NO DOUBLES!)
+    // ═══════════════════════════════════════════════════════════════
+    
+    buildRoadNearBuilding: function(game, state) {
+        let buildings = game.blds || [];
+        
+        for (let b of buildings) {
+            if (b.t === 'WELL') continue;
+            
+            let adjacentPositions = [
+                {x: b.x - 1, y: b.y}, {x: b.x + 1, y: b.y},
+                {x: b.x, y: b.y - 1}, {x: b.x, y: b.y + 1},
+                {x: b.x + 2, y: b.y}, {x: b.x + 2, y: b.y + 1},
+                {x: b.x - 1, y: b.y + 1}, {x: b.x, y: b.y + 2}, {x: b.x + 1, y: b.y + 2}
+            ];
+            
+            for (let pos of adjacentPositions) {
+                let key = pos.x + ',' + pos.y;
+                if (this.builtRoadPositions.has(key)) continue;
+                if (game.tiles && game.tiles[pos.x] && game.tiles[pos.x][pos.y]) {
+                    if (game.tiles[pos.x][pos.y].road) continue;
                 }
-            }
-        }
-    },
-    
-    canBuildAt: function(game, x, y) {
-        if (!game.tiles || x < 0 || y < 0) return false;
-        if (x >= game.tiles.length || y >= game.tiles[0].length) return false;
-        
-        let tile = game.tiles[x][y];
-        if (!tile) return false;
-        
-        // Can't build on water, stone, existing structures
-        if (tile.type === 'WATER' || tile.type === 'DEEP' || tile.type === 'RIVER') return false;
-        if (tile.type === 'STONE') return false;
-        if (tile.zone || tile.road) return false;
-        
-        return true;
-    },
-    
-    isNearWater: function(game) {
-        if (!game.player || !game.tiles) return false;
-        
-        let px = game.player.x;
-        let py = game.player.y;
-        
-        for (let dx = -3; dx <= 3; dx++) {
-            for (let dy = -3; dy <= 3; dy++) {
-                let x = px + dx;
-                let y = py + dy;
                 
-                if (x < 0 || y < 0 || x >= game.tiles.length || y >= game.tiles[0].length) continue;
-                
-                let tile = game.tiles[x][y];
-                if (tile && (tile.type === 'WATER' || tile.type === 'RIVER')) {
-                    return true;
+                if (this.canBuildAt(game, pos.x, pos.y, 'ROAD')) {
+                    if (this.build(game, 'ROAD', pos.x, pos.y)) {
+                        this.builtRoadPositions.add(key);
+                        return true;
+                    }
                 }
             }
         }
         return false;
+    },
+    
+    analyzeCity: function(game) {
+        let blds = game.blds || [];
+        let wells = blds.filter(b => b.t === 'WELL').length;
+        let resCount = blds.filter(b => b.t === 'RES').length;
+        let comCount = blds.filter(b => b.t === 'COM').length;
+        let indCount = blds.filter(b => b.t === 'IND').length;
+        
+        let roadCount = 0;
+        if (game.tiles) {
+            for (let x = 0; x < game.tiles.length; x++) {
+                for (let y = 0; y < game.tiles[x].length; y++) {
+                    if (game.tiles[x][y] && game.tiles[x][y].road) roadCount++;
+                }
+            }
+        }
+        
+        return {
+            pop: game.pop || 0,
+            food: game.food || 0,
+            wood: game.wood || 0,
+            wells: wells,
+            waterCap: wells * this.RULES.WATER_PER_WELL,
+            housingCap: game.housingCap || 0,
+            resCount: resCount,
+            comCount: comCount,
+            indCount: indCount,
+            roadCount: roadCount
+        };
+    },
+    
+    buildNearCenter: function(game, type, minDistance) {
+        if (!this.cityCenter && game.player) {
+            this.cityCenter = { x: game.player.x, y: game.player.y };
+        }
+        if (!this.cityCenter) return false;
+        
+        let cx = this.cityCenter.x, cy = this.cityCenter.y;
+        
+        for (let dist = minDistance; dist < 50; dist++) {
+            let positions = this.getPositionsAtDistance(cx, cy, dist);
+            this.shuffle(positions);
+            
+            for (let pos of positions) {
+                if (this.canBuildAt(game, pos.x, pos.y, type)) {
+                    return this.build(game, type, pos.x, pos.y);
+                }
+            }
+        }
+        return false;
+    },
+    
+    getPositionsAtDistance: function(cx, cy, dist) {
+        let positions = [];
+        if (dist === 0) { positions.push({x: cx, y: cy}); return positions; }
+        
+        for (let x = cx - dist; x <= cx + dist; x++) {
+            positions.push({x: x, y: cy - dist});
+            positions.push({x: x, y: cy + dist});
+        }
+        for (let y = cy - dist + 1; y < cy + dist; y++) {
+            positions.push({x: cx - dist, y: y});
+            positions.push({x: cx + dist, y: y});
+        }
+        return positions;
+    },
+    
+    shuffle: function(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            let j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+    },
+    
+    canBuildAt: function(game, x, y, type) {
+        if (!game.tiles || x < 2 || y < 2) return false;
+        if (x >= game.tiles.length - 2) return false;
+        if (!game.tiles[x] || y >= game.tiles[x].length - 2) return false;
+        
+        let tile = game.tiles[x][y];
+        if (!tile) return false;
+        if (!tile.explored) return false;
+        if (['WATER', 'DEEP', 'RIVER', 'STONE'].includes(tile.type)) return false;
+        if (tile.zone || tile.building) return false;
+        if (type === 'ROAD' && tile.road) return false;
+        if (type !== 'ROAD' && tile.road) return false;
+        
+        if (game.blds) {
+            for (let b of game.blds) {
+                let sz = (b.t === 'WELL' || b.t === 'COM' || b.t === 'IND') ? 1 : 2;
+                if (x >= b.x && x < b.x + sz && y >= b.y && y < b.y + sz) return false;
+            }
+        }
+        
+        if (type === 'RES') {
+            for (let dx = 0; dx < 2; dx++) {
+                for (let dy = 0; dy < 2; dy++) {
+                    let tx = x + dx, ty = y + dy;
+                    if (tx >= game.tiles.length || ty >= game.tiles[0].length) return false;
+                    let t = game.tiles[tx][ty];
+                    if (!t || !t.explored) return false;
+                    if (['WATER', 'DEEP', 'RIVER', 'STONE'].includes(t.type)) return false;
+                    if (t.zone || t.road || t.building) return false;
+                    
+                    if (game.blds) {
+                        for (let b of game.blds) {
+                            let sz = (b.t === 'WELL' || b.t === 'COM' || b.t === 'IND') ? 1 : 2;
+                            if (tx >= b.x && tx < b.x + sz && ty >= b.y && ty < b.y + sz) return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    },
+    
+    build: function(game, type, x, y) {
+        if (typeof game.build !== 'function') return false;
+        
+        try {
+            game.build(type, x, y);
+            this.stats.totalBuilt++;
+            if (type === 'WELL') this.stats.wellsBuilt++;
+            if (type === 'RES') this.stats.resBuilt++;
+            if (type === 'COM') this.stats.comBuilt++;
+            if (type === 'IND') this.stats.indBuilt++;
+            if (type === 'ROAD') {
+                this.stats.roadsBuilt++;
+                this.builtRoadPositions.add(x + ',' + y);
+            }
+            this.lastBuildType = type;
+            this.recordAction(type, true);
+            return true;
+        } catch (e) {
+            this.recordAction(type, false);
+            return false;
+        }
+    },
+    
+    // ═══════════════════════════════════════════════════════════════
+    // LEARNING & MEMORY
+    // ═══════════════════════════════════════════════════════════════
+    
+    recordAction: function(action, success) {
+        if (success) {
+            this.memory.stats.successfulActions[action] = (this.memory.stats.successfulActions[action] || 0) + 1;
+        } else {
+            this.memory.stats.failedActions[action] = (this.memory.stats.failedActions[action] || 0) + 1;
+        }
+    },
+    
+    saveSnapshot: function(state) {
+        let snapshot = {
+            pop: state.pop,
+            ratio: { res: state.resCount, com: state.comCount, ind: state.indCount },
+            wells: state.wells,
+            year: this.stats.turnsAdvanced,
+            strategy: this.strategies.current
+        };
+        
+        if (state.pop > (this.memory.stats.bestPop * 0.8)) {
+            this.memory.patterns.push(snapshot);
+            if (this.memory.patterns.length > 100) this.memory.patterns.shift();
+            if (state.pop > this.memory.stats.bestPop) {
+                this.memory.stats.bestPop = state.pop;
+            }
+            this.saveMemory();
+        }
+    },
+    
+    saveMemory: function() {
+        try {
+            localStorage.setItem('blueprint_ai_memory', JSON.stringify(this.memory));
+        } catch (e) {}
+    },
+    
+    loadMemory: function() {
+        try {
+            let saved = localStorage.getItem('blueprint_ai_memory');
+            if (saved) {
+                this.memory = JSON.parse(saved);
+                console.log('[AI v3] Memory loaded - Best pop:', this.memory.stats.bestPop);
+            }
+        } catch (e) {}
     },
     
     // ═══════════════════════════════════════════════════════════════
@@ -494,34 +642,124 @@ const BlueprintAI = {
     
     enable: function() {
         this.enabled = true;
-        console.log(`🏗️ ${this.version} ENABLED`);
+        this.loadMemory();
+        console.log('[AI v3] ' + this.version + ' ENABLED');
+        console.log('[AI v3] Starting with STARTER strategy (your pattern!)');
     },
     
     disable: function() {
         this.enabled = false;
-        console.log('🏗️ Blueprint AI DISABLED');
+        this.saveMemory();
+        console.log('[AI v3] DISABLED');
+    },
+    
+    reset: function() {
+        this.cityCenter = null;
+        this.currentRing = 0;
+        this.buildSequence = 0;
+        this.builtRoadPositions = new Set();
+        this.strategies.current = 0;
+        this.strategies.STARTER.step = 0;
+        this.strategies.STARTER.subStep = 0;
+        this.strategies.STARTER.waitStartYear = 0;
+        this.lastYear = 0;
+        this.lastSwitchCount = 0;
+        this.stats = { totalBuilt: 0, wellsBuilt: 0, resBuilt: 0, comBuilt: 0, indBuilt: 0, roadsBuilt: 0, turnsAdvanced: 0 };
     },
     
     setBlueprint: function(name) {
-        if (this.blueprints[name]) {
-            this.currentBlueprint = this.blueprints[name];
-            this.buildQueue = [];
-            console.log(`[Blueprint AI] Switched to: ${this.currentBlueprint.name}`);
-        }
+        console.log('[AI v3] Blueprint: ' + name);
     },
     
-    // Show current status
     status: function() {
         return {
             enabled: this.enabled,
-            blueprint: this.currentBlueprint ? this.currentBlueprint.name : 'None',
-            queueLength: this.buildQueue.length,
-            version: this.version
+            version: this.version,
+            stats: this.stats,
+            currentStrategy: ['Starter', 'Balanced 4:1:2', 'Housing Heavy 6:1:1'][this.strategies.current],
+            starterStep: this.strategies.STARTER.step
         };
+    },
+    
+    getLearningStats: function() {
+        return {
+            patternsLearned: this.memory.patterns.length,
+            bestPop: this.memory.stats.bestPop,
+            successfulActions: this.memory.stats.successfulActions,
+            currentStrategy: this.strategies.current,
+            watchedActions: this.memory.watchedActions ? this.memory.watchedActions.length : 0
+        };
+    },
+    
+    clearMemory: function() {
+        this.memory = { patterns: [], stats: { gamesPlayed: 0, bestPop: 0, successfulActions: {}, failedActions: {} }, blueprints: [], watchedActions: [] };
+        localStorage.removeItem('blueprint_ai_memory');
+    },
+    
+    // ═══════════════════════════════════════════════════════════════
+    // WATCH MODE
+    // ═══════════════════════════════════════════════════════════════
+    
+    watchMode: false,
+    watchedBuilds: [],
+    
+    startWatching: function() {
+        this.watchMode = true;
+        this.watchedBuilds = [];
+        console.log('[AI v3] 👀 WATCH MODE ENABLED');
+    },
+    
+    stopWatching: function() {
+        this.watchMode = false;
+        if (this.watchedBuilds.length > 0) {
+            if (!this.memory.watchedActions) this.memory.watchedActions = [];
+            let lesson = {
+                timestamp: Date.now(),
+                builds: this.watchedBuilds.slice(),
+                buildOrder: this.watchedBuilds.map(b => b.type)
+            };
+            this.memory.watchedActions.push(lesson);
+            if (this.memory.watchedActions.length > 20) this.memory.watchedActions.shift();
+            this.saveMemory();
+            console.log('[AI v3] 📚 Learned: ' + lesson.buildOrder.join(' → '));
+        }
+        this.watchedBuilds = [];
+    },
+    
+    recordPlayerBuild: function(type, x, y, game) {
+        if (!this.watchMode) return;
+        let state = this.analyzeCity(game);
+        this.watchedBuilds.push({
+            type: type, x: x, y: y,
+            stateWhen: { pop: state.pop, food: state.food, wells: state.wells }
+        });
+        console.log('[AI v3] 👁️ Watched: ' + type);
+    },
+    
+    applyLesson: function() {
+        if (!this.memory.watchedActions || this.memory.watchedActions.length === 0) {
+            console.log('[AI v3] No lessons yet!');
+            return;
+        }
+        let lesson = this.memory.watchedActions[this.memory.watchedActions.length - 1];
+        let counts = { WELL: 0, RES: 0, COM: 0, IND: 0 };
+        for (let b of lesson.builds) {
+            if (counts[b.type] !== undefined) counts[b.type]++;
+        }
+        let total = counts.RES + counts.COM + counts.IND;
+        if (total > 0) {
+            let gcd = (a, b) => b ? gcd(b, a % b) : a;
+            let g = gcd(gcd(counts.RES || 1, counts.COM || 1), counts.IND || 1);
+            this.RULES.TARGET_RATIO = {
+                R: Math.round((counts.RES || 1) / g),
+                C: Math.round((counts.COM || 1) / g),
+                I: Math.round((counts.IND || 1) / g)
+            };
+            console.log('[AI v3] Applied ratio: ' + this.RULES.TARGET_RATIO.R + ':' + this.RULES.TARGET_RATIO.C + ':' + this.RULES.TARGET_RATIO.I);
+        }
     }
 };
 
-// Export for use
 if (typeof window !== 'undefined') {
     window.BlueprintAI = BlueprintAI;
 }
