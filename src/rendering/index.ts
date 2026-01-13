@@ -22,6 +22,22 @@ export {
     type ZoneColorKey
 } from './colors.js';
 
+// Terrain renderer
+export { TerrainRenderer, terrainRenderer } from './terrain-renderer.js';
+
+// Road renderer
+export { RoadRenderer, roadRenderer } from './road-renderer.js';
+
+// Player renderer (Logical Larry)
+export { PlayerRenderer, playerRenderer } from './player-renderer.js';
+
+// Entity renderer (berries, nomads, animals)
+// Note: Entity types are intentionally not re-exported to avoid conflict with types/tiles.ts
+export { EntityRenderer, entityRenderer } from './entity-renderer.js';
+
+// Building renderer (RES, COM, IND, WELL, etc.)
+export { BuildingRenderer, buildingRenderer, type BuildingRenderData } from './building-renderer.js';
+
 // Canvas drawing utilities
 export {
     roundRectPath,
@@ -89,3 +105,15 @@ export {
     type WoodChipData,
     type DustData
 } from './effects.js';
+
+// Game Renderer
+export {
+    GameRenderer,
+    createGameRenderer,
+    type RenderTile,
+    type RenderBuilding,
+    type RenderPlayer,
+    type RenderEntity,
+    type GameRenderState,
+    type RendererConfig
+} from './game-renderer.js';

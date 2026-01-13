@@ -1,23 +1,27 @@
 /**
  * Civil Zones - Rendering Colors & Constants
  * Victorian parchment map theme colors and visual configuration
+ * Re-exports colors from game-config for convenience
  */
+
+import { CFG } from '../config/game-config.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TERRAIN COLORS - Aged parchment & ink tones
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const TERRAIN_COLORS = {
-    DEEP: '#4A6B8A',
-    WATER: '#6B8FAD',
-    RIVER: '#7FA0B8',
-    SAND: '#D4C4A8',
-    GRASS: '#C9D4A0',
-    FOREST: '#8B9A6B',
-    EARTH: '#C4A882',
-    ROCK: '#9A9A8A',
-    SNOW: '#E8E8E0',
-    STONE: '#8A8A7A'
+    DEEP: CFG.COLORS.DEEP,
+    WATER: CFG.COLORS.WATER,
+    RIVER: CFG.COLORS.RIVER,
+    SAND: CFG.COLORS.SAND,
+    GRASS: CFG.COLORS.GRASS,
+    FOREST: CFG.COLORS.FOREST,
+    EARTH: CFG.COLORS.EARTH,
+    ROCK: CFG.COLORS.ROCK,
+    SNOW: CFG.COLORS.SNOW,
+    STONE: CFG.COLORS.STONE,
+    PINE: CFG.COLORS.PINE
 } as const;
 
 export type TerrainColorKey = keyof typeof TERRAIN_COLORS;

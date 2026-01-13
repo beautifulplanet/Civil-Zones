@@ -121,6 +121,9 @@ export interface KeyboardHandlerConfig {
     
     /** Check if input should be limited (e.g., death screen - allow Tab/Enter) */
     isLimitedInput?: () => boolean;
+    
+    /** Minimum time between movement key repeats (ms) */
+    moveRepeatDelay?: number;
 }
 
 export class KeyboardHandler {
@@ -128,9 +131,12 @@ export class KeyboardHandler {
     private boundKeyDown: (e: globalThis.KeyboardEvent) => void;
     private boundKeyUp: (e: globalThis.KeyboardEvent) => void;
     private enabled: boolean = false;
+    private lastMoveTime: number = 0;
+    private moveRepeatDelay: number;
 
     constructor(config: KeyboardHandlerConfig = {}) {
         this.config = config;
+        this.moveRepeatDelay = config.moveRepeatDelay ?? 50; // Fast 50ms for snappy controls like legacy
         this.boundKeyDown = this.handleKeyDown.bind(this);
         this.boundKeyUp = this.handleKeyUp.bind(this);
     }
@@ -187,7 +193,12 @@ export class KeyboardHandler {
         // Handle movement keys
         const moveDelta = getMovementDelta(e.key);
         if (moveDelta) {
-            this.config.onMove?.(moveDelta[0], moveDelta[1]);
+            // Rate limit movement to prevent jerky key repeat
+            const now = performance.now();
+            if (now - this.lastMoveTime >= this.moveRepeatDelay) {
+                this.lastMoveTime = now;
+                this.config.onMove?.(moveDelta[0], moveDelta[1]);
+            }
             e.preventDefault();
             return;
         }

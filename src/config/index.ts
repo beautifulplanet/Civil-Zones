@@ -3,6 +3,9 @@
  * Central export point for all configuration modules
  */
 
+// Main game config
+export { CFG } from './game-config.js';
+
 // Constants
 export {
     MAP_CONFIG,

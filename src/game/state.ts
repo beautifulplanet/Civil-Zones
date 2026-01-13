@@ -32,7 +32,7 @@ export interface BerryEntity {
     locked?: boolean;
 }
 
-/** Nomad entity */
+/** Nomad entity on tile (legacy) */
 export interface NomadEntity {
     type: 'NOMAD';
     pop: number;
@@ -47,18 +47,46 @@ export interface NomadEntity {
     damage: number;
 }
 
+/** Nomad that roams the map (new system) */
+export interface RoamingNomad {
+    x: number;
+    y: number;
+    is_hostile: boolean;
+    // Animation state
+    prevX?: number;
+    prevY?: number;
+    moveProgress?: number;
+    // Movement state
+    targetX?: number;
+    targetY?: number;
+    walkCycle?: number;  // For leg animation
+    state: 'IDLE' | 'WALKING' | 'CHASING';
+    chaseTarget?: { x: number; y: number };
+}
+
 /** Stone deposit */
 export interface StoneDeposit {
     metal: number;
 }
 
-/** Animal entity */
+/** Animal entity with animation state */
 export interface Animal {
     x: number;
     y: number;
     hits: number;
     type: string;
     locked?: boolean;
+    // Animation state
+    prevX?: number;
+    prevY?: number;
+    moveProgress?: number;  // 0 to 1, interpolation between prev and current
+    walkCycle?: number;     // For leg animation
+    state?: 'IDLE' | 'WALKING' | 'FLEEING';
+    fleeTarget?: { x: number; y: number };
+    // Flee persistence (prevents ping-pong)
+    fleeTimer?: number;     // Frames to keep fleeing after threat leaves
+    fleeFromX?: number;     // Last known threat position X
+    fleeFromY?: number;     // Last known threat position Y
 }
 
 /** Wander well (Epoch 0) */
@@ -124,6 +152,7 @@ export interface GameState {
     peakPop: number;
     housingCap: number;
     waterCap: number;
+    yearsWithoutWell: number;
     
     // Player (Epoch 0)
     player: Player | null;
@@ -140,6 +169,7 @@ export interface GameState {
     
     // World entities
     animals: Animal[];
+    nomads: RoamingNomad[];  // Nomads that roam and chase animals
     wanderWells: WanderWell[];
     nomadsFound: number;
     
@@ -201,6 +231,7 @@ export function createInitialGameState(): GameState {
         peakPop: 4,
         housingCap: 0,
         waterCap: 0,
+        yearsWithoutWell: 0,
         
         // Player
         player: null,
@@ -234,6 +265,7 @@ export function createInitialGameState(): GameState {
         
         // World entities
         animals: [],
+        nomads: [],  // Roaming nomads
         wanderWells: [],
         nomadsFound: 0,
         

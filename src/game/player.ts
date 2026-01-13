@@ -16,6 +16,9 @@ export interface Player {
     health: number;
     direction: Direction;
     bashTime?: number;      // Timestamp for bash animation
+    walkCycle?: number;     // Walking leg animation cycle (0 to 2π)
+    isMoving?: boolean;     // Currently moving (for walk animation)
+    lastMoveTime?: number;  // Timestamp of last movement
 }
 
 /** Movement result */

@@ -36,6 +36,26 @@ export {
     MAX_TECHNICAL_LOG_ENTRIES
 } from './types.js';
 
+// UI Controller - main UI management
+export {
+    initUIController,
+    setTool,
+    getCurrentTool,
+    updateDashboard,
+    updateDebugInfo,
+    updateStatsContent,
+    updateLogContent,
+    showLorePopup,
+    showSettlementVideo,
+    showGameOver,
+    getUIState,
+    updateSettleButton,
+    showWanderUI,
+    showCityUI
+} from './controller.js';
+
+export type { Tool, UIState, UICallbacks } from './controller.js';
+
 // Toast Notifications
 export {
     initToast,

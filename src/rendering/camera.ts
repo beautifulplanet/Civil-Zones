@@ -37,8 +37,8 @@ export interface CameraConfig {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const DEFAULT_CAMERA_CONFIG: CameraConfig = {
-    minZoom: 0.5,
-    maxZoom: 3.0,
+    minZoom: 0.15,
+    maxZoom: 5.0,
     zoomSpeed: 0.1,
     panSpeed: 10
 };

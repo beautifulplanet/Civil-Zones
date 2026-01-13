@@ -16,8 +16,8 @@ import type {
 
 export const MAP_CONFIG: MapConfig = {
     TILE: 48,    // Tile size in pixels
-    W: 250,      // Map width in tiles
-    H: 250       // Map height in tiles
+    W: 500,      // Initial map width (expandable to 2000!)
+    H: 500       // Initial map height (expandable to 2000!)
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

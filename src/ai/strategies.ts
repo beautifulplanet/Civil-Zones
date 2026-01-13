@@ -18,17 +18,66 @@ import type {
 // MACRO PLAYBOOKS
 // ═══════════════════════════════════════════════════════════════════
 
-/** Default macro playbooks for city building */
+/** Default macro playbooks for city building 
+ * IMPROVED: Roads come BEFORE zones to connect them (like a human would)
+ * Pattern: Road network first, then zones along roads
+ */
 export const DEFAULT_PLAYBOOKS: MacroPlaybook[] = [
+    {
+        id: 'road_first_expansion',
+        name: 'Road Network First (Recommended)',
+        steps: [
+            // Start: Build road network from center
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES' },       // First house along road
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_WELL', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES', waitYears: 2 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES', waitYears: 2 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_COM', waitYears: 3 },  // Commercial along road
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_WELL', waitYears: 2 },
+            { action: 'BUILD_RES', waitYears: 2 }
+        ]
+    },
+    {
+        id: 'grid_builder',
+        name: 'Grid Pattern Builder',
+        steps: [
+            // Build a small road grid first
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            // Now fill in zones
+            { action: 'BUILD_RES' },
+            { action: 'BUILD_WELL', waitYears: 1 },
+            { action: 'BUILD_RES', waitYears: 2 },
+            { action: 'BUILD_RES', waitYears: 2 },
+            // Expand grid
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_COM', waitYears: 2 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_IND', requirePop: 20, waitYears: 3 }
+        ]
+    },
     {
         id: 'early_twin_res',
         name: 'Twin Huts Opener',
         steps: [
+            { action: 'BUILD_ROAD' },      // Road first!
             { action: 'BUILD_RES' },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES', waitYears: 2 },
-            { action: 'BUILD_ROAD', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_WELL', waitYears: 2 },
-            { action: 'BUILD_ROAD', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES', waitYears: 2 }
         ]
     },
@@ -36,72 +85,79 @@ export const DEFAULT_PLAYBOOKS: MacroPlaybook[] = [
         id: 'water_buffer',
         name: 'Water Buffer Start',
         steps: [
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_WELL' },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES', waitYears: 2 },
-            { action: 'BUILD_ROAD', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES', waitYears: 2, requirePop: 12 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_COM', waitYears: 1, minYear: 3, requireDemand: 'C' }
         ]
     },
     {
-        id: 'wood_stack',
-        name: 'Wood Stockpile First',
+        id: 'main_street',
+        name: 'Main Street Pattern',
         steps: [
-            { action: 'PASS_YEAR', waitYears: 1 },
-            { action: 'PASS_YEAR', waitYears: 1 },
+            // Build main street
             { action: 'BUILD_ROAD' },
-            { action: 'BUILD_ROAD', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            // Build zones along main street
+            { action: 'BUILD_RES' },
+            { action: 'BUILD_WELL', waitYears: 1 },
             { action: 'BUILD_RES', waitYears: 2 },
-            { action: 'BUILD_WELL', waitYears: 2 }
-        ]
-    },
-    {
-        id: 'tutorial_clone',
-        name: 'Tutorial Clone',
-        steps: [
-            { action: 'BUILD_RES' },
-            { action: 'BUILD_ROAD' },
-            { action: 'BUILD_ROAD' },
-            { action: 'BUILD_WELL', waitYears: 2 },
-            { action: 'PASS_YEAR', waitYears: 7 },
-            { action: 'BUILD_RES' },
-            { action: 'BUILD_COM' },
-            { action: 'BUILD_ROAD' }
-        ]
-    },
-    {
-        id: 'satisfaction_ladder',
-        name: 'Satisfaction Ladder',
-        steps: [
-            { action: 'BUILD_WELL', requireNeeds: ['water'] },
-            { action: 'BUILD_RES', requireNeeds: ['housing'], waitYears: 1 },
-            { action: 'BUILD_RES', requireNeeds: ['housing'], waitYears: 2 },
-            { action: 'BUILD_COM', requireDemand: 'C', waitYears: 1 },
-            { action: 'BUILD_ROAD', waitYears: 1 }
-        ]
-    },
-    {
-        id: 'industrial_threshold',
-        name: 'Industrial Threshold',
-        steps: [
-            { action: 'BUILD_RES' },
+            { action: 'BUILD_RES', waitYears: 2 },
             { action: 'BUILD_COM', waitYears: 2 },
-            { action: 'BUILD_ROAD', waitYears: 1 },
-            { action: 'BUILD_IND', requirePop: 25, requireFood: 1000, requireWood: 1000, waitYears: 5 },
-            { action: 'BUILD_ROAD', waitYears: 1 }
+            // Branch roads
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES', waitYears: 2 },
+            { action: 'BUILD_IND', requirePop: 25, waitYears: 3 }
         ]
     },
     {
-        id: 'balanced_pairing',
-        name: 'Balanced Pairing',
+        id: 'balanced_growth',
+        name: 'Balanced Road+Zone Growth',
         steps: [
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES' },
             { action: 'BUILD_ROAD' },
             { action: 'BUILD_WELL', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_RES', waitYears: 2 },
-            { action: 'BUILD_ROAD', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES', waitYears: 2 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_COM', waitYears: 2 },
+            { action: 'BUILD_ROAD' },
             { action: 'BUILD_WELL', waitYears: 1 }
+        ]
+    },
+    {
+        id: 'industrial_district',
+        name: 'Industrial District Plan',
+        steps: [
+            // Roads for residential area
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES' },
+            { action: 'BUILD_WELL', waitYears: 1 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_RES', waitYears: 2 },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_COM', waitYears: 2 },
+            // Roads to industrial area
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_ROAD' },
+            { action: 'BUILD_IND', requirePop: 20, requireFood: 500, waitYears: 3 },
+            { action: 'BUILD_IND', waitYears: 2 },
+            { action: 'BUILD_ROAD' }
         ]
     }
 ];
@@ -110,21 +166,23 @@ export const DEFAULT_PLAYBOOKS: MacroPlaybook[] = [
 // SEQUENCE STRATEGIES
 // ═══════════════════════════════════════════════════════════════════
 
-/** Starter sequence strategy */
+/** Starter sequence strategy - Roads first approach */
 export const STARTER_STRATEGY: SequenceStrategy = {
     name: 'Starter',
     sequence: [
+        { type: 'ROAD', count: 3 },  // Build roads first!
         { type: 'RES', count: 1 },
+        { type: 'ROAD', count: 1 },
         { type: 'WELL', count: 1 },
         { type: 'ROAD', count: 2 },
-        { type: 'WAIT', years: 8 },
         { type: 'RES', count: 1 },
         { type: 'WAIT', years: 5 },
-        { type: 'RES', count: 1 },
-        { type: 'WAIT', years: 5 },
-        { type: 'COM', count: 2 },
         { type: 'ROAD', count: 2 },
-        { type: 'IND', count: 2 },
+        { type: 'RES', count: 1 },
+        { type: 'ROAD', count: 2 },
+        { type: 'COM', count: 1 },
+        { type: 'ROAD', count: 2 },
+        { type: 'IND', count: 1 },
         { type: 'ROAD', count: 2 }
     ],
     step: 0,
@@ -132,18 +190,18 @@ export const STARTER_STRATEGY: SequenceStrategy = {
     waitStartYear: 0
 };
 
-/** Balanced ratio strategy */
+/** Balanced ratio strategy - More roads! */
 export const BALANCED_STRATEGY: RatioStrategy = {
     name: 'Balanced',
     ratio: { R: 4, C: 1, I: 2 },
-    roadsPerBuilding: 0.5
+    roadsPerBuilding: 1.5  // Build 1.5 roads per zone (was 0.5)
 };
 
 /** Housing-heavy ratio strategy */
 export const HOUSING_HEAVY_STRATEGY: RatioStrategy = {
     name: 'Housing Heavy',
     ratio: { R: 6, C: 1, I: 1 },
-    roadsPerBuilding: 0.3
+    roadsPerBuilding: 1.0  // Build 1 road per zone (was 0.3)
 };
 
 // ═══════════════════════════════════════════════════════════════════
