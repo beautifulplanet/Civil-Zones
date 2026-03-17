@@ -1,0 +1,26 @@
+[
+  {
+    "id": "res_tent",
+    "name": "Nomad Tent",
+    "type": "R",
+    "cost": 10,
+    "levelRequirement": 0,
+    "description": "A basic shelter for nomads."
+  },
+  {
+    "id": "com_market_stall",
+    "name": "Market Stall",
+    "type": "C",
+    "cost": 50,
+    "levelRequirement": 1,
+    "description": "A place to trade goods."
+  },
+  {
+    "id": "ind_woodcutter",
+    "name": "Woodcutter Camp",
+    "type": "I",
+    "cost": 100,
+    "levelRequirement": 0,
+    "description": "Harvests wood from nearby forests."
+  }
+]

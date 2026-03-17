@@ -1,0 +1,10 @@
+{
+  "levelNumber": 0,
+  "levelName": "The Beginning",
+  "allowedBuildingIds": [
+    "res_tent",
+    "ind_woodcutter"
+  ],
+  "startingMoney": 500,
+  "populationGoal": 10
+}
